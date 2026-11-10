@@ -337,6 +337,10 @@ extension Language {
         .themeXP: "Windows XP",
         .themeWin10: "Windows 10",
 
+        // Windows
+        .separateDockIcons: "Separate Dock Icon for Each Window",
+        .cannotOpenWindow: "Cannot open a new window",
+
         // Windows 10: places
         .thisPC: "This PC",
         .quickAccess: "Quick access",

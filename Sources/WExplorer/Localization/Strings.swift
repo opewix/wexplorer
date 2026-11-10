@@ -117,6 +117,9 @@ enum Str: String, CaseIterable {
     // Тема оформления
     case theme, themeXP, themeWin10
 
+    // Окна
+    case separateDockIcons, cannotOpenWindow
+
     // Windows 10: места
     case thisPC, quickAccess, recentLocations
 

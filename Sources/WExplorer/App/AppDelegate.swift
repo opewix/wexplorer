@@ -5,7 +5,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Menus.main()
-        openWindow(at: Self.startLocation())
+        // Экземпляр, запущенный другим экземпляром, открывается там, куда его послали.
+        openWindow(at: Instances.startLocation ?? Self.startLocation(), frame: Instances.startFrame)
+        Instances.observeTheme { [weak self] theme in self?.apply(theme) }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -39,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if !window.setFrameUsingName("MainWindow") {
                 window.center()
             }
-            if controllers.isEmpty { window.setFrameAutosaveName("MainWindow") }
+            // Имя автосохранения сразу подставляет сохранённую рамку — окну с заданной рамкой его не даём.
+            if frame == nil && controllers.isEmpty { window.setFrameAutosaveName("MainWindow") }
         }
         controllers.append(controller)
         controller.showWindow(nil)
@@ -80,10 +83,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    /// «Вид → Тема». Каждое окно пересобирается на месте: та же папка, история и рамка.
+    /// Новое окно по команде пользователя. В режиме «отдельная иконка в Dock» — новый экземпляр.
+    func openNewWindow(at location: Location, near frame: NSRect?) {
+        guard Instances.separate, Instances.canLaunch else {
+            openWindow(at: location)
+            return
+        }
+        Instances.launch(at: location, near: frame) { [weak self] in
+            Alerts.error(tr(.cannotOpenWindow))
+            self?.openWindow(at: location)
+        }
+    }
+
+    @objc func toggleSeparateInstances(_ sender: Any?) {
+        Instances.separate.toggle()
+        NSApp.mainMenu = Menus.main()
+    }
+
+    /// «Вид → Тема». Тема меняется и в остальных экземплярах программы.
     @objc func setTheme(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let theme = Theme(rawValue: raw),
               theme != Theme.current else { return }
+        apply(theme)
+        Instances.broadcast(theme)
+    }
+
+    /// Каждое окно пересобирается на месте: та же папка, история и рамка.
+    private func apply(_ theme: Theme) {
+        guard theme != Theme.current else { return }
         Theme.choose(theme)
         NSApp.mainMenu = Menus.main()
         let key = NSApp.keyWindow
@@ -104,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func newWindow(_ sender: Any?) {
-        let current = (NSApp.keyWindow?.windowController as? MainWindowController)?.location.url
-        openWindow(at: .folder(current ?? Places.home))
+        let key = NSApp.keyWindow?.windowController as? MainWindowController
+        openNewWindow(at: .folder(key?.location.url ?? Places.home), near: key?.window?.frame)
     }
 }

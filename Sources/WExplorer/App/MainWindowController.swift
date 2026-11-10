@@ -29,8 +29,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     var pendingSelection: [URL]?
     var pendingRename: URL?
     /// «Вырезанные» файлы — общие для всех окон, чтобы Cmd+X в одном и Cmd+V в другом переносили файлы.
-    static var cutURLs: [URL] = []
-    static var cutChangeCount = -1
 
     init(location: Location, history: NavigationHistory = NavigationHistory()) {
         self.location = location
@@ -143,7 +141,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         Theme.isWin10 ? connectWin10() : connectXP()
 
         sidebar.folderTree.onSelect = { [weak self] location in self?.navigate(to: location) }
-        sidebar.folderTree.onOpenInNewWindow = { [weak self] location in self?.appDelegate?.openWindow(at: location) }
+        sidebar.folderTree.onOpenInNewWindow = { [weak self] location in self?.openNewWindow(at: location) }
         sidebar.folderTree.onDrop = { [weak self] urls, folder, copy in
             self?.browserDrop(urls, into: folder, copy: copy) ?? false
         }
@@ -484,7 +482,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             menu.addItem(item)
         }
         add(tr(.open), bold: true) { [weak self] in self?.navigate(to: place) }
-        add(tr(.openInNewWindow)) { [weak self] in self?.appDelegate?.openWindow(at: place) }
+        add(tr(.openInNewWindow)) { [weak self] in self?.openNewWindow(at: place) }
         guard let url = place.url else { return menu }
         add(tr(.showInFinder)) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         add(tr(.openInTerminal)) {
@@ -557,6 +555,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
 
+    /// Новое окно по команде пользователя: в этом процессе или отдельным экземпляром (`Instances`).
+    func openNewWindow(at place: Location) {
+        appDelegate?.openNewWindow(at: place, near: window?.frame)
+    }
+
     func open(_ items: [FileItem]) {
         guard !items.isEmpty else { return }
         if items.count == 1, items[0].isDirectory {
@@ -565,7 +568,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
         for item in items {
             if item.isDirectory {
-                appDelegate?.openWindow(at: .folder(item.url))
+                openNewWindow(at: .folder(item.url))
             } else {
                 NSWorkspace.shared.open(item.url)
             }
@@ -596,7 +599,7 @@ extension MainWindowController: FileBrowserDelegate {
     func browserOpenInNewWindow(_ index: Int) {
         let item = browser.items[index]
         if item.isDirectory {
-            appDelegate?.openWindow(at: .folder(item.url))
+            openNewWindow(at: .folder(item.url))
         } else {
             NSWorkspace.shared.open(item.url)
         }

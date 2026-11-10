@@ -2,6 +2,8 @@ import AppKit
 
 /// Команды меню, тулбара и панели задач. Все они доступны через цепочку ответчиков.
 extension MainWindowController: NSMenuItemValidation {
+    /// Тип в буфере обмена, которым помечены вырезанные (а не скопированные) файлы.
+    static let cutMarker = NSPasteboard.PasteboardType("dev.oleg.wexplorer.cut")
     private var selectedURLs: [URL] {
         browser.selectedItems.filter { !$0.isVolume }.map(\.url)
     }
@@ -36,7 +38,7 @@ extension MainWindowController: NSMenuItemValidation {
 
     @objc func openInNewWindow(_ sender: Any?) {
         for item in browser.selectedItems where item.isDirectory {
-            appDelegate?.openWindow(at: .folder(item.url))
+            openNewWindow(at: .folder(item.url))
         }
     }
 
@@ -95,9 +97,14 @@ extension MainWindowController: NSMenuItemValidation {
         guard !urls.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects(urls as [NSURL])
-        Self.cutURLs = cut ? urls : []
-        Self.cutChangeCount = cut ? pasteboard.changeCount : -1
+        // Отметка «вырезано» лежит в самом буфере обмена — её видят и другие экземпляры программы.
+        let items = urls.enumerated().map { index, url -> NSPasteboardItem in
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .fileURL)
+            if cut && index == 0 { item.setData(Data(), forType: Self.cutMarker) }
+            return item
+        }
+        pasteboard.writeObjects(items)
         status.leftText = cut
             ? tr(.cutStatus, urls.count)
             : tr(.copiedStatus, urls.count)
@@ -105,7 +112,7 @@ extension MainWindowController: NSMenuItemValidation {
 
     @objc func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
-        let isCut = pasteboard.changeCount == Self.cutChangeCount && !Self.cutURLs.isEmpty
+        let isCut = pasteboard.pasteboardItems?.contains { $0.types.contains(Self.cutMarker) } == true
         pasteFiles(move: isCut)
     }
 
@@ -122,11 +129,7 @@ extension MainWindowController: NSMenuItemValidation {
         else { return }
         ops.transfer(urls, to: dest, kind: move ? .move : .copy) { [weak self] created in
             guard let self else { return }
-            if move {
-                Self.cutURLs = []
-                Self.cutChangeCount = -1
-                pasteboard.clearContents()
-            }
+            if move { pasteboard.clearContents() }
             self.pendingSelection = created
             self.reload(preserveSelection: true)
         }
@@ -396,7 +399,7 @@ extension MainWindowController: NSMenuItemValidation {
         groups.append(TaskGroup(title: tr(.otherPlaces), entries: places.map { place in
             .link(place.title, place.icon) { [weak self] in
                 if NSEvent.modifierFlags.contains(.command) {
-                    self?.appDelegate?.openWindow(at: place)
+                    self?.openNewWindow(at: place)
                 } else {
                     self?.navigate(to: place)
                 }

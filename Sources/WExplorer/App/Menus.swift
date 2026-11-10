@@ -132,8 +132,15 @@ enum Menus {
         ]
         if includeGo { items.append(submenu(tr(.menuGo), goItems())) }
         items.append(item(tr(.refresh), #selector(W.refresh(_:)), "r"))
-        items += [.separator(), themeMenu()]
+        items += [.separator(), themeMenu(), separateInstancesItem()]
         return menu(tr(.menuView), items)
+    }
+
+    /// Каждое новое окно — отдельный экземпляр программы со своей иконкой в Dock.
+    static func separateInstancesItem() -> NSMenuItem {
+        let item = item(tr(.separateDockIcons), #selector(AppDelegate.toggleSeparateInstances(_:)))
+        item.state = Instances.separate ? .on : .off
+        return item
     }
 
     /// «Тема ▸ Windows XP / Windows 10». Окна пересобираются сразу, перезапуск не нужен.

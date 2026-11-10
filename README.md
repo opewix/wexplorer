@@ -25,6 +25,9 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
   [7-Zip](https://www.7-zip.org/) is installed (`brew install sevenzip`), WExplorer can use it for
   more formats and for creating password-protected archives.
 - **Search** powered by Spotlight, **Favorites**, **Properties** window.
+- **One Dock icon per window** (View → Separate Dock Icon for Each Window, on by default): every
+  new window runs as its own instance, like separate Explorer windows on the Windows taskbar;
+  cut & paste and theme changes work across instances.
 - **Languages:** English and Russian (Tools → Language).
 - macOS keyboard shortcuts (⌘C / ⌘X / ⌘V) instead of Ctrl.
 
