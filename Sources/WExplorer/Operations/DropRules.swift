@@ -1,0 +1,26 @@
+import AppKit
+
+/// Правила перетаскивания файлов, общие для списка и дерева папок.
+enum DropRules {
+    static func urls(_ info: NSDraggingInfo) -> [URL] {
+        info.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+
+    /// Как в Finder: на том же диске — перемещение, на другой — копирование; Option — всегда копирование.
+    static func operation(_ info: NSDraggingInfo, into folder: URL) -> NSDragOperation {
+        let urls = urls(info)
+        guard !urls.isEmpty else { return [] }
+        let folderPath = folder.standardizedFileURL.path
+        if urls.contains(where: {
+            let p = $0.standardizedFileURL.path
+            return p == folderPath || folderPath.hasPrefix(p + "/")
+        }) { return [] }
+        let mask = info.draggingSourceOperationMask
+        if !mask.contains(.move) { return mask.contains(.copy) ? .copy : [] }
+        let alreadyThere = urls.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL.path == folderPath }
+        if alreadyThere { return [] }
+        if Places.sameVolume(urls[0], folder) { return .move }
+        return mask.contains(.copy) ? .copy : .move
+    }
+}

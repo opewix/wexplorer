@@ -1,0 +1,6 @@
+.build/
+build/
+.DS_Store
+
+# Иконки Windows 10 для сверки — материалы Microsoft, в публичный репозиторий не идут
+reference/win10-icons-sheet.png
