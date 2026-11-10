@@ -66,7 +66,7 @@ final class FileBrowserView: LunaView {
         table.dataSource = self
         table.delegate = self
         table.style = .plain
-        table.rowHeight = 18
+        table.rowHeight = Theme.isWin10 ? Win10.rowHeight : 18
         table.intercellSpacing = NSSize(width: 0, height: 0)
         table.allowsMultipleSelection = true
         table.allowsEmptySelection = true
@@ -75,12 +75,20 @@ final class FileBrowserView: LunaView {
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.target = self
         table.doubleAction = #selector(tableDoubleClicked(_:))
-        let widths: [SortKey: CGFloat] = [.name: 260, .size: 80, .type: 170, .modified: 120]
-        for key in SortKey.allCases {
+        let widths: [SortKey: CGFloat] = Theme.isWin10
+            ? [.name: 260, .size: 90, .type: 150, .modified: 140]
+            : [.name: 260, .size: 80, .type: 170, .modified: 120]
+        // В Windows 10 колонки идут в другом порядке: Имя, Дата изменения, Тип, Размер.
+        let order: [SortKey] = Theme.isWin10 ? [.name, .modified, .type, .size] : SortKey.allCases
+        if Theme.isWin10 {
+            table.headerView = Win10HeaderView(frame: NSRect(x: 0, y: 0, width: 100, height: 25))
+            table.cornerView = nil
+        }
+        for key in order {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(key.columnID))
             let header = PaddedHeaderCell(textCell: key.title)
             header.font = column.headerCell.font
-            header.alignment = .left
+            header.alignment = Theme.isWin10 && key == .size ? .right : .left
             column.headerCell = header
             column.width = widths[key] ?? 100
             column.minWidth = 40
@@ -90,6 +98,7 @@ final class FileBrowserView: LunaView {
         table.registerForDraggedTypes([.fileURL])
         table.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         table.setDraggingSourceOperationMask([.copy, .move], forLocal: false)
+        table.hover.install(on: table)
         tableScroll.documentView = table
         tableScroll.hasVerticalScroller = true
         tableScroll.hasHorizontalScroller = true
@@ -138,11 +147,11 @@ final class FileBrowserView: LunaView {
             flow.minimumInteritemSpacing = 6
             flow.minimumLineSpacing = 4
         case .icons:
-            flow.itemSize = NSSize(width: 84, height: 72)
+            flow.itemSize = Theme.isWin10 ? NSSize(width: 90, height: 80) : NSSize(width: 84, height: 72)
             flow.minimumInteritemSpacing = 2
             flow.minimumLineSpacing = 8
         case .list:
-            flow.itemSize = NSSize(width: 220, height: 18)
+            flow.itemSize = NSSize(width: 220, height: Theme.isWin10 ? Win10.rowHeight : 18)
             flow.minimumInteritemSpacing = 0
             flow.minimumLineSpacing = 16
         case .details:
@@ -474,6 +483,22 @@ extension FileBrowserView: NSTextFieldDelegate {
 
 final class FileTableView: NSTableView {
     weak var browser: FileBrowserView?
+    let hover = RowHover()
+
+    override func reloadData() {
+        hover.reset()
+        super.reloadData()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        hover.track(self, event: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hover.track(self, event: nil)
+    }
 
     override func keyDown(with event: NSEvent) {
         if browser?.handleKey(event) == true { return }

@@ -1,13 +1,50 @@
 import AppKit
 
-/// Строка состояния XP: три «утопленные» секции — число объектов, размер, зона.
+/// Строка состояния. XP: три «утопленные» секции — число объектов, размер, зона.
+/// Windows 10: плоская белая строка с текстом слева и переключателями вида справа.
 final class StatusBarView: LunaView {
     var leftText = "" { didSet { needsDisplay = true } }
     var middleText = "" { didSet { needsDisplay = true } }
     var rightText = "" { didSet { needsDisplay = true } }
     var rightIcon: NSImage? { didSet { needsDisplay = true } }
 
+    /// Windows 10: кнопки «Таблица» и «Эскизы» справа.
+    var onSelectMode: ((ViewMode) -> Void)?
+    var mode: ViewMode = .details {
+        didSet {
+            detailsButton.isToggled = mode == .details
+            thumbnailsButton.isToggled = mode == .thumbnails
+        }
+    }
+    private let detailsButton = LunaButton(title: tr(.viewDetails), symbol: nil, style: .iconOnly, imageSide: 14)
+    private let thumbnailsButton = LunaButton(title: tr(.viewThumbnails), symbol: nil, style: .iconOnly, imageSide: 14)
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        guard Theme.isWin10 else { return }
+        detailsButton.image = XPIcons.image(.viewDetails, size: 14)
+        thumbnailsButton.image = XPIcons.image(.views, size: 14)
+        detailsButton.onClick = { [weak self] _ in self?.onSelectMode?(.details) }
+        thumbnailsButton.onClick = { [weak self] _ in self?.onSelectMode?(.thumbnails) }
+        for (button, offset) in [(thumbnailsButton, -4), (detailsButton, -26)] as [(LunaButton, CGFloat)] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(button)
+            NSLayoutConstraint.activate([
+                button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: offset),
+                button.centerYAnchor.constraint(equalTo: centerYAnchor),
+                button.widthAnchor.constraint(equalToConstant: 20),
+                button.heightAnchor.constraint(equalToConstant: 18),
+            ])
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
     override func draw(_ dirtyRect: NSRect) {
+        guard !Theme.isWin10 else {
+            drawWin10()
+            return
+        }
         Luna.face.setFill()
         bounds.fill()
         Luna.separator.setFill()
@@ -31,6 +68,20 @@ final class StatusBarView: LunaView {
         drawText(rightText, in: textRect)
     }
 
+    /// «Элементов: 11    Выбран 1 элемент  5,4 КБ» — подряд, с промежутком, как в Windows 10.
+    private func drawWin10() {
+        NSColor.white.setFill()
+        bounds.fill()
+        let attrs: [NSAttributedString.Key: Any] = [.font: Win10.font, .foregroundColor: Win10.text]
+        let available = bounds.width - 60
+        let leftWidth = min((leftText as NSString).size(withAttributes: attrs).width + 1, available)
+        drawText(leftText, in: NSRect(x: 8, y: 0, width: leftWidth, height: bounds.height), font: Win10.font)
+        let middleX = 8 + leftWidth + 24
+        if middleX < available {
+            drawText(middleText, in: NSRect(x: middleX, y: 0, width: available - middleX, height: bounds.height), font: Win10.font)
+        }
+    }
+
     private func sunken(_ r: NSRect) {
         Luna.separator.setFill()
         NSRect(x: r.minX, y: r.minY, width: r.width, height: 1).fill()
@@ -40,10 +91,10 @@ final class StatusBarView: LunaView {
         NSRect(x: r.maxX - 1, y: r.minY, width: 1, height: r.height).fill()
     }
 
-    private func drawText(_ text: String, in rect: NSRect) {
+    private func drawText(_ text: String, in rect: NSRect, font: NSFont = Luna.font) {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
-        let attrs: [NSAttributedString.Key: Any] = [.font: Luna.font, .foregroundColor: Luna.text, .paragraphStyle: style]
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Luna.text, .paragraphStyle: style]
         let h = (text as NSString).size(withAttributes: attrs).height
         (text as NSString).draw(in: NSRect(x: rect.minX, y: rect.midY - h / 2, width: rect.width, height: h),
                                 withAttributes: attrs)

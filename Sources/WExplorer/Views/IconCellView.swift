@@ -32,10 +32,31 @@ final class IconCellView: LunaView {
     var mode: ViewMode = .icons { didSet { needsDisplay = true } }
     var image: NSImage? { didSet { needsDisplay = true } }
     var isSelected = false { didSet { needsDisplay = true } }
+    private var isHovered = false { didSet { needsDisplay = true } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        if Theme.isWin10 {
+            addTrackingArea(NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    /// Windows 10 выделяет элемент целиком светло-голубой рамкой, XP — только подпись и значок.
+    private var win10Selection: Bool { Theme.isWin10 }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let item else { return }
         let w = bounds.width, h = bounds.height
+        if win10Selection && (isSelected || isHovered) {
+            NSBezierPath.win10Box(bounds, fill: isSelected ? Win10.selection : Win10.hover,
+                                  border: isSelected ? Win10.selectionBorder : nil)
+        }
         switch mode {
         case .icons:
             drawImage(in: NSRect(x: (w - 32) / 2, y: 4, width: 32, height: 32))
@@ -46,8 +67,8 @@ final class IconCellView: LunaView {
             NSColor.white.setFill()
             frame.fill()
             let border = NSBezierPath(rect: frame.insetBy(dx: 0.5, dy: 0.5))
-            border.lineWidth = isSelected ? 2 : 1
-            (isSelected ? Luna.selection : Luna.thumbBorder).setStroke()
+            border.lineWidth = isSelected && !win10Selection ? 2 : 1
+            (isSelected && !win10Selection ? Luna.selection : Luna.thumbBorder).setStroke()
             border.stroke()
             let isThumbnail = image != nil && image !== item.icon
             let target = isThumbnail
@@ -83,7 +104,7 @@ final class IconCellView: LunaView {
         guard let image else { return }
         let target = LunaButton.fit(image.size, in: rect)
         image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        if isSelected && tint {
+        if isSelected && tint && !win10Selection {
             Luna.selection.withAlphaComponent(0.45).setFill()
             target.fill(using: .sourceAtop)
         }
@@ -94,18 +115,19 @@ final class IconCellView: LunaView {
         style.alignment = centered ? .center : .left
         style.lineBreakMode = lines == 1 ? .byTruncatingTail : .byWordWrapping
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: Luna.font,
-            .foregroundColor: isSelected ? Luna.selectionText : Luna.text,
+            .font: Theme.font,
+            .foregroundColor: isSelected && !win10Selection ? Luna.selectionText : Luna.text,
             .paragraphStyle: style,
         ]
-        let lineHeight = ceil(Luna.font.ascender - Luna.font.descender + Luna.font.leading)
+        let font = Theme.font
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
         let maxSize = NSSize(width: rect.width, height: min(rect.height, lineHeight * CGFloat(lines)))
         let options: NSString.DrawingOptions = [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
         let measured = (text as NSString).boundingRect(with: maxSize, options: options, attributes: attrs)
         let width = min(ceil(measured.width), rect.width)
         let height = min(ceil(measured.height), maxSize.height)
         let textRect = NSRect(x: centered ? rect.midX - width / 2 : rect.minX, y: rect.minY, width: width, height: height)
-        if isSelected {
+        if isSelected && !win10Selection {
             Luna.selection.setFill()
             textRect.insetBy(dx: -2, dy: 0).fill()
         }
@@ -116,7 +138,7 @@ final class IconCellView: LunaView {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         (text as NSString).draw(in: rect, withAttributes: [
-            .font: Luna.font, .foregroundColor: Luna.secondaryText, .paragraphStyle: style,
+            .font: Theme.font, .foregroundColor: Theme.isWin10 ? Win10.secondaryText : Luna.secondaryText, .paragraphStyle: style,
         ])
     }
 }

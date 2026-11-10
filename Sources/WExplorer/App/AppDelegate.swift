@@ -24,11 +24,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .folder(Places.home)
     }
 
+    /// frame — пересборка окна при смене темы: то же место на экране, та же история.
     @discardableResult
-    func openWindow(at location: Location) -> MainWindowController {
-        let controller = MainWindowController(location: location)
+    func openWindow(at location: Location, history: NavigationHistory = NavigationHistory(),
+                    frame: NSRect? = nil, autosave: Bool = false) -> MainWindowController {
+        let controller = MainWindowController(location: location, history: history)
         if let window = controller.window {
-            if let current = NSApp.keyWindow ?? controllers.last?.window {
+            if let frame {
+                window.setFrame(frame, display: false)
+                if autosave { window.setFrameAutosaveName("MainWindow") }
+            } else if let current = NSApp.keyWindow ?? controllers.last?.window {
                 window.setFrame(current.frame, display: false)
                 window.setFrameTopLeftPoint(window.cascadeTopLeft(from: NSPoint(x: current.frame.minX, y: current.frame.maxY)))
             } else if !window.setFrameUsingName("MainWindow") {
@@ -73,6 +78,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$0\"", path]
         try? task.run()
         NSApp.terminate(nil)
+    }
+
+    /// «Вид → Тема». Каждое окно пересобирается на месте: та же папка, история и рамка.
+    @objc func setTheme(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let theme = Theme(rawValue: raw),
+              theme != Theme.current else { return }
+        Theme.choose(theme)
+        NSApp.mainMenu = Menus.main()
+        let key = NSApp.keyWindow
+        var newKey: MainWindowController?
+        // Перебираем копию: закрытие и открытие окон меняют `controllers`.
+        for old in controllers {
+            guard let window = old.window else { continue }
+            let frame = window.frame
+            let autosave = window.frameAutosaveName == "MainWindow"
+            let wasKey = window === key
+            // Сначала закрываем: имя автосохранения рамки должно освободиться для нового окна.
+            window.setFrameAutosaveName("")
+            window.close()
+            let controller = openWindow(at: old.location, history: old.history, frame: frame, autosave: autosave)
+            if wasKey { newKey = controller }
+        }
+        newKey?.window?.makeKeyAndOrderFront(nil)
     }
 
     @objc func newWindow(_ sender: Any?) {

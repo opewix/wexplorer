@@ -113,7 +113,7 @@ extension Language {
         .keyboardShortcuts: "Сочетания клавиш",
         .shortcutsText: """
             Enter — открыть
-            Backspace — на уровень вверх
+            Backspace — на уровень вверх (в теме Windows 10 — назад)
             Cmd+[  /  Cmd+]  или  Option+←/→ — назад / вперёд
             Cmd+↑ — на уровень вверх,  Cmd+↓ — открыть
             Cmd+L — перейти к папке (адресная строка)
@@ -331,6 +331,53 @@ extension Language {
         .searchScopeCurrent: "В текущей папке",
         .searchScopeHome: "В домашней папке",
         .searchScopeComputer: "На всём компьютере",
+
+        // Тема оформления
+        .theme: "Тема",
+        .themeXP: "Windows XP",
+        .themeWin10: "Windows 10",
+
+        // Windows 10: места
+        .thisPC: "Этот компьютер",
+        .quickAccess: "Быстрый доступ",
+        .recentLocations: "Последние расположения",
+
+        // Windows 10: лента — вкладки и группы
+        .ribbonHome: "Главная",
+        .ribbonShare: "Поделиться",
+        .minimizeRibbon: "Свернуть ленту",
+        .expandRibbon: "Развернуть ленту",
+        .groupClipboard: "Буфер обмена",
+        .groupOrganize: "Упорядочить",
+        .groupSelect: "Выделить",
+        .groupSend: "Отправить",
+        .groupPanes: "Области",
+        .groupLayout: "Структура",
+        .groupCurrentView: "Текущее представление",
+        .groupShowHide: "Показать или скрыть",
+
+        // Windows 10: лента — команды
+        .pinToQuickAccess: "Закрепить на панели быстрого доступа",
+        .unpinFromQuickAccess: "Открепить от панели быстрого доступа",
+        .moveTo: "Переместить в",
+        .copyTo: "Копировать в",
+        .ribbonNewFolder: "Новая папка",
+        .newItem: "Создать элемент",
+        .selectNone: "Снять выделение",
+        .share: "Поделиться",
+        .email: "Эл. почта",
+        .zip: "Сжать",
+        .navigationPane: "Область навигации",
+        .sortBy: "Сортировать",
+        .hiddenItems: "Скрытые элементы",
+        .chooseLocation: "Выбрать расположение...",
+
+        // Windows 10: поиск и строка состояния
+        .searchPlaceholder: "Поиск: {0}",
+        .itemsCount: "Элементов: {0}",
+        .itemsCountOne: "Элементов: 1",
+        .itemsSelected: "Выбрано элементов: {0}",
+        .itemSelectedOne: "Выбран 1 элемент",
 
         // Смена языка
         .languageChangedTitle: "Язык интерфейса изменён",

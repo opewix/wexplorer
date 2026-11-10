@@ -36,3 +36,8 @@ final class SeparatorView: LunaView {
         NSRect(x: 0, y: 1, width: bounds.width, height: 1).fill()
     }
 }
+
+/// Разделитель левой панели: в Windows 10 почти незаметный, как в Проводнике.
+final class ThemedSplitView: NSSplitView {
+    override var dividerColor: NSColor { Theme.isWin10 ? Win10.paneDivider : super.dividerColor }
+}

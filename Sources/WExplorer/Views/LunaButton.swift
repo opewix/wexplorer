@@ -50,7 +50,7 @@ final class LunaButton: LunaView {
     private var arrowWidth: CGFloat { showsMenuArrow ? 10 : 0 }
 
     override var intrinsicContentSize: NSSize {
-        let textW = (title as NSString).size(withAttributes: [.font: Luna.font]).width
+        let textW = (title as NSString).size(withAttributes: [.font: Theme.font]).width
         switch style {
         case .vertical:
             return NSSize(width: max(36, textW + 14) + arrowWidth, height: Luna.toolbarHeight - 8)
@@ -63,7 +63,14 @@ final class LunaButton: LunaView {
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
-        if isEnabled && (isPressed || isToggled || isHovered) {
+        if Theme.isWin10 {
+            // Windows 10: плоская голубая подсветка без скруглений.
+            if isEnabled && (isPressed || isToggled) {
+                NSBezierPath.win10Box(bounds, fill: Win10.selection, border: Win10.selectionBorder)
+            } else if isEnabled && isHovered {
+                NSBezierPath.win10Box(bounds, fill: Win10.hover, border: Win10.hoverBorder)
+            }
+        } else if isEnabled && (isPressed || isToggled || isHovered) {
             let path = NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3)
             ((isPressed || isToggled) ? Luna.buttonPressed : Luna.buttonHover).setFill()
             path.fill()
@@ -71,10 +78,10 @@ final class LunaButton: LunaView {
             path.stroke()
         }
 
-        let offset: CGFloat = isPressed ? 1 : 0
+        let offset: CGFloat = isPressed && !Theme.isWin10 ? 1 : 0
         let contentWidth = bounds.width - arrowWidth
-        let textColor = isEnabled ? Luna.text : Luna.secondaryText
-        let attrs: [NSAttributedString.Key: Any] = [.font: Luna.font, .foregroundColor: textColor]
+        let textColor = isEnabled ? Luna.text : (Theme.isWin10 ? Win10.disabledText : Luna.secondaryText)
+        let attrs: [NSAttributedString.Key: Any] = [.font: Theme.font, .foregroundColor: textColor]
         let textSize = (title as NSString).size(withAttributes: attrs)
 
         var imageBox: NSRect

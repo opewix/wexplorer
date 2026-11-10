@@ -1,15 +1,21 @@
 import AppKit
 
 /// Окно проводника: текущее место, история, настройки; связывает все панели между собой.
-/// Рамка окна — родная macOS, содержимое — в стиле XP.
+/// Рамка окна — родная macOS, содержимое — в стиле XP или Windows 10 (`Theme.current`).
 final class MainWindowController: NSWindowController, NSWindowDelegate {
+    // Панели XP
     let menuBar = MenuBarView()
     let toolbar = ToolbarView()
     let address = AddressBarView()
+    // Панели Windows 10
+    let ribbon = RibbonView()
+    let navBar = NavigationBarView()
+    // Общие
     let sidebar = SidebarContainer()
     let browser = FileBrowserView()
     let status = StatusBarView()
-    private let split = NSSplitView()
+    private let split = ThemedSplitView()
+    static let navigationPaneHiddenKey = "navigationPaneHidden"
 
     private(set) var location: Location
     var history = NavigationHistory()
@@ -26,8 +32,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     static var cutURLs: [URL] = []
     static var cutChangeCount = -1
 
-    init(location: Location) {
+    init(location: Location, history: NavigationHistory = NavigationHistory()) {
         self.location = location
+        self.history = history
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 960, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -43,6 +50,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.contentView = buildContent()
         connect()
         browser.mode = settings.viewMode
+        status.mode = settings.viewMode
         browser.setSortIndicator(settings.sortKey, ascending: settings.ascending)
         sidebar.folderTree.showHidden = settings.showHidden
         navigate(to: location, recordHistory: false)
@@ -53,19 +61,57 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Раскладка
 
+    private var sidebarWidth: CGFloat { Theme.isWin10 ? Win10.sidebarWidth : Luna.sidebarWidth }
+
     private func buildContent() -> NSView {
-        let root = LunaView()
-        let sep2 = SeparatorView()
-
-
         split.isVertical = true
         split.dividerStyle = .thin
         // NSSplitView запоминает начальную ширину панели как «запасной размер» — задаём её заранее.
-        sidebar.frame = NSRect(x: 0, y: 0, width: Luna.sidebarWidth, height: 400)
+        sidebar.frame = NSRect(x: 0, y: 0, width: sidebarWidth, height: 400)
         split.addArrangedSubview(sidebar)
         split.addArrangedSubview(browser)
-        split.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        split.setHoldingPriority(.init(260), forSubviewAt: 0)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+        return Theme.isWin10 ? buildWin10Content() : buildXPContent()
+    }
+
+    /// Windows 10: лента, строка навигации, область навигации + список, строка состояния.
+    private func buildWin10Content() -> NSView {
+        let root = LunaView()
+        root.wantsLayer = true
+        root.layer?.backgroundColor = NSColor.white.cgColor
+        sidebar.mode = .folders
+        sidebar.isHidden = UserDefaults.standard.bool(forKey: Self.navigationPaneHiddenKey)
+        ribbon.overlayHost = root
+
+        for v in [ribbon, navBar, split, status] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(v)
+            v.leadingAnchor.constraint(equalTo: root.leadingAnchor).isActive = true
+            v.trailingAnchor.constraint(equalTo: root.trailingAnchor).isActive = true
+        }
+        NSLayoutConstraint.activate([
+            ribbon.topAnchor.constraint(equalTo: root.topAnchor),
+            navBar.topAnchor.constraint(equalTo: ribbon.bottomAnchor),
+            navBar.heightAnchor.constraint(equalToConstant: Win10.navigationBarHeight),
+            split.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+            status.topAnchor.constraint(equalTo: split.bottomAnchor),
+            status.heightAnchor.constraint(equalToConstant: Win10.statusBarHeight),
+            status.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            browser.widthAnchor.constraint(greaterThanOrEqualToConstant: 250),
+        ])
+        // Скрытая область навигации сворачивается в ноль — ограничения ширины не должны этому мешать.
+        for constraint in [sidebar.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+                           sidebar.widthAnchor.constraint(lessThanOrEqualToConstant: 420)] {
+            constraint.priority = .init(999)
+            constraint.isActive = true
+        }
+        return root
+    }
+
+    private func buildXPContent() -> NSView {
+        let root = LunaView()
+        let sep2 = SeparatorView()
 
         let views: [NSView] = [menuBar, toolbar, sep2, address, split, status]
         for v in views {
@@ -90,12 +136,60 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         sidebar.widthAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
         sidebar.widthAnchor.constraint(lessThanOrEqualToConstant: 420).isActive = true
         browser.widthAnchor.constraint(greaterThanOrEqualToConstant: 250).isActive = true
-
-
         return root
     }
 
     private func connect() {
+        Theme.isWin10 ? connectWin10() : connectXP()
+
+        sidebar.folderTree.onSelect = { [weak self] location in self?.navigate(to: location) }
+        sidebar.folderTree.onOpenInNewWindow = { [weak self] location in self?.appDelegate?.openWindow(at: location) }
+        sidebar.folderTree.onDrop = { [weak self] urls, folder, copy in
+            self?.browserDrop(urls, into: folder, copy: copy) ?? false
+        }
+        sidebar.folderTree.menuProvider = { [weak self] location in self?.treeMenu(for: location) }
+
+        browser.delegate = self
+
+        watcher.onChange = { [weak self] in
+            guard let self else { return }
+            if self.browser.isRenaming {
+                self.reloadAfterRename = true
+            } else {
+                self.reload(preserveSelection: true)
+            }
+        }
+        search.onResults = { [weak self] urls, finished in self?.showSearchResults(urls, finished: finished) }
+    }
+
+    private func connectWin10() {
+        navBar.back.onClick = { [weak self] _ in self?.goBack(nil) }
+        navBar.forward.onClick = { [weak self] _ in self?.goForward(nil) }
+        navBar.up.onClick = { [weak self] _ in self?.goUp(nil) }
+        navBar.recent.onClick = { [weak self] button in
+            self?.recentMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY + 2), in: button)
+        }
+        navBar.address.onNavigate = { [weak self] location in self?.navigate(to: location) }
+        navBar.address.onSubmit = { [weak self] text in self?.openAddress(text) }
+        navBar.address.onCancel = { [weak self] in self?.focusList() }
+        navBar.address.onRefresh = { [weak self] in self?.refresh(nil) }
+        navBar.address.menuProvider = { [weak self] in self?.addressMenu() ?? NSMenu() }
+        navBar.search.onSearch = { [weak self] text in self?.startSearch(text, scopeIndex: 0) }
+        navBar.search.onClear = { [weak self] in
+            guard let self, case .search(_, let scope) = self.location else { return }
+            self.navigate(to: scope.path == "/" ? .computer : .folder(scope))
+        }
+
+        ribbon.tabs = ribbonTabs()
+        ribbon.fileMenu = { [weak self] in self?.ribbonFileMenu() ?? NSMenu() }
+        ribbon.validate = { [weak self] item in self?.validateMenuItem(item) ?? false }
+        ribbon.perform = { [weak self] command, view in self?.performRibbon(command, from: view) }
+        ribbon.onHelp = { [weak self] in self?.showShortcuts(nil) }
+
+        status.onSelectMode = { [weak self] mode in self?.applyViewMode(mode) }
+    }
+
+    private func connectXP() {
         menuBar.menuProvider = { Menus.windowMenu(at: $0) }
 
         toolbar.back.onClick = { [weak self] _ in self?.goBack(nil) }
@@ -113,32 +207,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         address.menuProvider = { [weak self] in self?.addressMenu() ?? NSMenu() }
 
         sidebar.onClose = { [weak self] in self?.setSidebarMode(.tasks) }
-        sidebar.folderTree.onSelect = { [weak self] location in self?.navigate(to: location) }
-        sidebar.folderTree.onOpenInNewWindow = { [weak self] location in self?.appDelegate?.openWindow(at: location) }
-        sidebar.folderTree.onDrop = { [weak self] urls, folder, copy in
-            self?.browserDrop(urls, into: folder, copy: copy) ?? false
-        }
         address.onCopyPath = { [weak self] in self?.copyPath(nil) }
         sidebar.searchPane.onSearch = { [weak self] text, scope in self?.startSearch(text, scopeIndex: scope) }
-
-        browser.delegate = self
-
-        watcher.onChange = { [weak self] in
-            guard let self else { return }
-            if self.browser.isRenaming {
-                self.reloadAfterRename = true
-            } else {
-                self.reload(preserveSelection: true)
-            }
-        }
-        search.onResults = { [weak self] urls, finished in self?.showSearchResults(urls, finished: finished) }
     }
 
     /// Начальная ширина левой панели. Вызывается после показа окна, когда раскладка уже посчитана,
     /// иначе разделитель сбрасывается.
     func applyInitialSidebarWidth() {
         window?.layoutIfNeeded()
-        split.setPosition(Luna.sidebarWidth, ofDividerAt: 0)
+        guard !sidebar.isHidden else { return }
+        split.setPosition(sidebarWidth, ofDividerAt: 0)
+    }
+
+    /// Показать или скрыть область навигации (Windows 10). Скрытая панель сворачивается в ноль.
+    func setNavigationPaneHidden(_ hidden: Bool) {
+        sidebar.isHidden = hidden
+        UserDefaults.standard.set(hidden, forKey: Self.navigationPaneHiddenKey)
+        split.adjustSubviews()
+        if !hidden {
+            applyInitialSidebarWidth()
+            sidebar.folderTree.reveal(location)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -246,6 +335,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     func updateChrome() {
         window?.title = location.title
         window?.representedURL = location.url
+        if Theme.isWin10 {
+            navBar.address.showHidden = settings.showHidden
+            navBar.update(location, canGoBack: history.canGoBack, canGoForward: history.canGoForward,
+                          canGoUp: location.parent != nil)
+            status.mode = settings.viewMode
+            if !sidebar.isHidden { sidebar.folderTree.reveal(location) }
+            ribbon.refresh()
+            return
+        }
         address.show(location)
         toolbar.back.isEnabled = history.canGoBack
         toolbar.forward.isEnabled = history.canGoForward
@@ -261,6 +359,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     func selectionChanged() {
         updateStatus()
         updateTaskPane()
+        if Theme.isWin10 { ribbon.refresh() }
     }
 
     private func updateStatus() {
@@ -268,6 +367,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         let all = browser.items
         func total(_ items: [FileItem]) -> Int64 {
             items.filter { !$0.isDirectory }.compactMap(\.size).reduce(0, +)
+        }
+        if Theme.isWin10 {
+            // «Элементов: 11    Выбран 1 элемент  5,4 КБ» — размер только у выбранных файлов.
+            status.leftText = all.count == 1 ? tr(.itemsCountOne) : tr(.itemsCount, all.count)
+            if selected.isEmpty {
+                status.middleText = ""
+            } else {
+                let files = selected.filter { !$0.isDirectory }
+                let size = files.isEmpty ? "" : "  " + Format.size(total(files))
+                status.middleText = (selected.count == 1 ? tr(.itemSelectedOne) : tr(.itemsSelected, selected.count)) + size
+            }
+            return
         }
         if selected.isEmpty {
             if case .search = location {
@@ -344,6 +455,63 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return menu
     }
 
+    /// Кнопка ⌄ рядом со стрелками Windows 10: последние места.
+    func recentMenu() -> NSMenu {
+        let menu = NSMenu()
+        for place in history.recent(10) {
+            let item = NSMenuItem(title: place.title, action: #selector(pickLocation(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = LocationRef(place)
+            item.image = place.icon
+            menu.addItem(item)
+        }
+        if menu.numberOfItems == 0 {
+            let item = NSMenuItem(title: location.title, action: nil, keyEquivalent: "")
+            item.image = location.icon
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    /// Контекстное меню папки в дереве: действует на эту папку, а не на выделение в списке.
+    func treeMenu(for place: Location) -> NSMenu {
+        let menu = NSMenu()
+        func add(_ title: String, bold: Bool = false, _ action: @escaping () -> Void) {
+            let item = ActionMenuItem(title: title, handler: action)
+            if bold {
+                item.attributedTitle = NSAttributedString(string: title, attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+            }
+            menu.addItem(item)
+        }
+        add(tr(.open), bold: true) { [weak self] in self?.navigate(to: place) }
+        add(tr(.openInNewWindow)) { [weak self] in self?.appDelegate?.openWindow(at: place) }
+        guard let url = place.url else { return menu }
+        add(tr(.showInFinder)) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        add(tr(.openInTerminal)) {
+            guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
+            NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        }
+        menu.addItem(.separator())
+        add(tr(.copyPath)) { [weak self] in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.path, forType: .string)
+            self?.status.leftText = tr(.pathCopied, url.path)
+        }
+        let pinned = Favorites.all.contains { $0.standardizedFileURL.path == url.standardizedFileURL.path }
+        if Theme.isWin10 {
+            add(pinned ? tr(.unpinFromQuickAccess) : tr(.pinToQuickAccess)) { [weak self] in
+                pinned ? Favorites.remove(url) : Favorites.add(url)
+                self?.sidebar.folderTree.reload()
+                self?.sidebar.folderTree.reveal(self?.location ?? place)
+            }
+        } else if !pinned {
+            add(tr(.addToFavorites)) { Favorites.add(url) }
+        }
+        menu.addItem(.separator())
+        add(tr(.properties)) { [weak self] in PropertiesWindowController.show(for: FileItem(url: url), near: self?.window) }
+        return menu
+    }
+
     @objc func pickLocation(_ sender: NSMenuItem) {
         guard let ref = sender.representedObject as? LocationRef else { return }
         navigate(to: ref.location)
@@ -351,6 +519,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     func focusList() {
         window?.makeFirstResponder(browser.activeView)
+    }
+
+    func applyViewMode(_ mode: ViewMode) {
+        settings.viewMode = mode
+        settings.save()
+        browser.mode = mode
+        status.mode = mode
+        if Theme.isWin10 { ribbon.refresh() }
     }
 
     // MARK: Левая панель и поиск
@@ -432,8 +608,8 @@ extension MainWindowController: FileBrowserDelegate {
         case 36 where flags.isEmpty, 76 where flags.isEmpty:  // Return, Enter — открыть
             openSelection(nil)
             return true
-        case 51 where flags.isEmpty:  // Backspace — на уровень вверх, как в XP
-            goUp(nil)
+        case 51 where flags.isEmpty:  // Backspace: в XP — на уровень вверх, в Windows 10 — назад
+            Theme.isWin10 ? goBack(nil) : goUp(nil)
             return true
         case 117 where flags.isEmpty:  // Forward Delete — в корзину
             moveToTrash(nil)

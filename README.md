@@ -1,16 +1,23 @@
 # WExplorer
 
 A Windows XP-style file manager for macOS. The Luna look, the task pane, the folder tree and the
-address bar you remember — running natively on your Mac.
+address bar you remember — running natively on your Mac. Prefer the newer look? Switch to the
+Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 
-![WExplorer window](reference/window-snapshot-en.png)
+![WExplorer in the Windows XP theme](reference/window-snapshot-en.png)
+
+![WExplorer in the Windows 10 theme](reference/window-snapshot-win10-en.png)
 
 ## Features
 
-- **Classic layout:** menu bar, toolbar with Back / Forward / Up / Search / Folders / Views,
-  address bar with autocomplete, status bar.
-- **Left pane:** switch between the task pane (File and Folder Tasks, Other Places, Details) and
-  the folder tree.
+- **Two themes** (View → Theme), switched instantly in all open windows:
+  - **Windows XP** — menu bar, toolbar with Back / Forward / Up / Search / Folders / Views, address
+    bar with autocomplete, Luna colors; the left pane switches between the task pane (File and
+    Folder Tasks, Other Places, Details) and the folder tree;
+  - **Windows 10** — File / Home / Share / View ribbon (collapsed by default, like the original),
+    breadcrumb address bar with subfolder menus and search-as-you-type, Quick access and This PC
+    navigation pane, flat light-blue selection, status bar with view switches.
+- **Folder tree** with drag & drop, a context menu and a resizable divider.
 - **Views:** Thumbnails, Tiles, Icons, List and Details, with QuickLook thumbnails.
 - **File operations:** copy, cut & paste, drag & drop to and from Finder, rename in place (F2),
   move to Trash, undo (⌘Z), name conflict dialog, progress window.

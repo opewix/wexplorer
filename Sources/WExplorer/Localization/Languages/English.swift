@@ -113,7 +113,7 @@ extension Language {
         .keyboardShortcuts: "Keyboard Shortcuts",
         .shortcutsText: """
             Enter — open
-            Backspace — up one level
+            Backspace — up one level (Windows 10 theme: back)
             Cmd+[  /  Cmd+]  or  Option+←/→ — back / forward
             Cmd+↑ — up one level,  Cmd+↓ — open
             Cmd+L — go to folder (address bar)
@@ -331,6 +331,53 @@ extension Language {
         .searchScopeCurrent: "In the current folder",
         .searchScopeHome: "In the home folder",
         .searchScopeComputer: "On the entire computer",
+
+        // Theme
+        .theme: "Theme",
+        .themeXP: "Windows XP",
+        .themeWin10: "Windows 10",
+
+        // Windows 10: places
+        .thisPC: "This PC",
+        .quickAccess: "Quick access",
+        .recentLocations: "Recent locations",
+
+        // Windows 10: ribbon tabs and groups
+        .ribbonHome: "Home",
+        .ribbonShare: "Share",
+        .minimizeRibbon: "Minimize the Ribbon",
+        .expandRibbon: "Expand the Ribbon",
+        .groupClipboard: "Clipboard",
+        .groupOrganize: "Organize",
+        .groupSelect: "Select",
+        .groupSend: "Send",
+        .groupPanes: "Panes",
+        .groupLayout: "Layout",
+        .groupCurrentView: "Current view",
+        .groupShowHide: "Show/hide",
+
+        // Windows 10: ribbon commands
+        .pinToQuickAccess: "Pin to Quick access",
+        .unpinFromQuickAccess: "Unpin from Quick access",
+        .moveTo: "Move to",
+        .copyTo: "Copy to",
+        .ribbonNewFolder: "New folder",
+        .newItem: "New item",
+        .selectNone: "Select none",
+        .share: "Share",
+        .email: "Email",
+        .zip: "Zip",
+        .navigationPane: "Navigation pane",
+        .sortBy: "Sort by",
+        .hiddenItems: "Hidden items",
+        .chooseLocation: "Choose location...",
+
+        // Windows 10: search and status bar
+        .searchPlaceholder: "Search {0}",
+        .itemsCount: "{0} items",
+        .itemsCountOne: "1 item",
+        .itemsSelected: "{0} items selected",
+        .itemSelectedOne: "1 item selected",
 
         // Language change
         .languageChangedTitle: "Interface language changed",

@@ -11,15 +11,25 @@ enum Places {
     static var documents: URL {
         fm.urls(for: .documentDirectory, in: .userDomainMask).first ?? home.appendingPathComponent("Documents")
     }
+    static var downloads: URL { userFolder(.downloadsDirectory, "Downloads") }
+    static var music: URL { userFolder(.musicDirectory, "Music") }
+    static var pictures: URL { userFolder(.picturesDirectory, "Pictures") }
+    static var movies: URL { userFolder(.moviesDirectory, "Movies") }
 
-    static var computerTitle: String { tr(.myComputer) }
+    private static func userFolder(_ directory: FileManager.SearchPathDirectory, _ name: String) -> URL {
+        fm.urls(for: directory, in: .userDomainMask).first ?? home.appendingPathComponent(name)
+    }
+
+    /// «Мой компьютер» в XP, «Этот компьютер» в Windows 10.
+    static var computerTitle: String { Theme.isWin10 ? tr(.thisPC) : tr(.myComputer) }
 
     static var computerIcon: NSImage { XPIcons.image(.computer, size: 16) }
 
     static func displayName(of url: URL) -> String {
         let path = url.standardizedFileURL.path
         if path == desktop.standardizedFileURL.path { return tr(.desktop) }
-        if path == documents.standardizedFileURL.path { return tr(.myDocuments) }
+        // В Windows 10 «Мои документы» стали просто «Документами» — это системное имя папки.
+        if path == documents.standardizedFileURL.path, !Theme.isWin10 { return tr(.myDocuments) }
         if isVolumeRoot(url), let name = try? url.resourceValues(forKeys: [.volumeLocalizedNameKey]).volumeLocalizedName {
             return name
         }

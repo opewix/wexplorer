@@ -119,16 +119,21 @@ final class AddressBarView: LunaView, NSTextFieldDelegate {
         typedLength = (field.stringValue as NSString).length
     }
 
-    /// Автодополнение как в XP: остаток имени подставляется выделенным, набор текста его заменяет.
     func controlTextDidChange(_ obj: Notification) {
-        guard let editor = field.currentEditor() else { return }
+        typedLength = Self.autocomplete(field, typedLength: typedLength)
+    }
+
+    /// Автодополнение как в XP: остаток имени подставляется выделенным, набор текста его заменяет.
+    /// Возвращает новую длину набранного текста. Общее для адресных строк обеих тем.
+    static func autocomplete(_ field: NSTextField, typedLength: Int) -> Int {
+        guard let editor = field.currentEditor() else { return typedLength }
         let text = field.stringValue
         let length = (text as NSString).length
-        defer { typedLength = length }
         guard length > typedLength, editor.selectedRange.location == length,
-              let completion = Self.completion(for: text) else { return }
+              let completion = completion(for: text) else { return length }
         field.stringValue = text + completion
         editor.selectedRange = NSRange(location: length, length: (completion as NSString).length)
+        return length
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {

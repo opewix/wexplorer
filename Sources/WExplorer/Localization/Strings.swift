@@ -114,6 +114,23 @@ enum Str: String, CaseIterable {
     case searchHeading, searchNamePrompt, searchWhere, searchButton
     case searchScopeCurrent, searchScopeHome, searchScopeComputer
 
+    // Тема оформления
+    case theme, themeXP, themeWin10
+
+    // Windows 10: места
+    case thisPC, quickAccess, recentLocations
+
+    // Windows 10: лента — вкладки и группы
+    case ribbonHome, ribbonShare, minimizeRibbon, expandRibbon
+    case groupClipboard, groupOrganize, groupSelect, groupSend, groupPanes, groupLayout, groupCurrentView, groupShowHide
+
+    // Windows 10: лента — команды
+    case pinToQuickAccess, unpinFromQuickAccess, moveTo, copyTo, ribbonNewFolder, newItem, selectNone
+    case share, email, zip, navigationPane, sortBy, hiddenItems, chooseLocation
+
+    // Windows 10: поиск и строка состояния
+    case searchPlaceholder, itemsCount, itemsCountOne, itemsSelected, itemSelectedOne
+
     // Смена языка
     case languageChangedTitle, languageChangedText, restartNow
 }

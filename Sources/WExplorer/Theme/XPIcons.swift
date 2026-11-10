@@ -16,6 +16,13 @@ enum XPIcon: String {
     case newFolder, moveTo, copyTo, delete, rename, info, settings
     // Адресная строка
     case copyPath
+    // Особые папки и «Быстрый доступ» (тема Windows 10)
+    case downloads, music, pictures, videos, quickAccess
+    // Лента Windows 10
+    case pin, cut, copy, paste, copyToFolder, properties, newItem
+    case selectAll, selectNone, invertSelection, share, email, navigationPane, sortBy, refresh, help
+    // Виды («Эскизы» — это `views`)
+    case viewTiles, viewIcons, viewList, viewDetails
 }
 
 enum XPIcons {
@@ -68,6 +75,10 @@ enum XPIcons {
         let path = url.standardizedFileURL.path
         if path == Places.desktop.standardizedFileURL.path { return .desktop }
         if path == Places.documents.standardizedFileURL.path { return .documents }
+        if path == Places.downloads.standardizedFileURL.path { return .downloads }
+        if path == Places.music.standardizedFileURL.path { return .music }
+        if path == Places.pictures.standardizedFileURL.path { return .pictures }
+        if path == Places.movies.standardizedFileURL.path { return .videos }
         return .folder
     }
 
@@ -141,6 +152,31 @@ enum XPIcons {
         case .info: info(p)
         case .settings: gear(p)
         case .copyPath: clipboard(p)
+        case .downloads: specialFolder(p, .downloads)
+        case .music: specialFolder(p, .music)
+        case .pictures: specialFolder(p, .pictures)
+        case .videos: specialFolder(p, .videos)
+        case .quickAccess: star(p)
+        case .pin: pin(p)
+        case .cut: scissors(p)
+        case .copy: copyTo(p)
+        case .paste: paste(p)
+        case .copyToFolder: folder(p, paper: .plain); badge(p, color: accent, symbol: .copy)
+        case .properties: properties(p)
+        case .newItem: page(p); badge(p, color: 0x2EA043, symbol: .plus)
+        case .selectAll: selection(p, filled: [0, 1, 2, 3])
+        case .selectNone: selection(p, filled: [])
+        case .invertSelection: selection(p, filled: [0, 3])
+        case .share: share(p)
+        case .email: envelope(p)
+        case .navigationPane: navigationPane(p)
+        case .sortBy: sortBy(p)
+        case .refresh: refresh(p)
+        case .help: help(p)
+        case .viewTiles: tilesView(p)
+        case .viewIcons: iconsView(p)
+        case .viewList: listView(p)
+        case .viewDetails: detailsView(p)
         }
     }
 
@@ -416,7 +452,7 @@ enum XPIcons {
 
     // MARK: Панель задач
 
-    private enum BadgeSymbol { case plus, arrow }
+    private enum BadgeSymbol { case plus, arrow, copy }
 
     /// Круглый значок в правом нижнем углу (новая папка, переместить).
     private static func badge(_ p: Pen, color: UInt32, symbol: BadgeSymbol) {
@@ -429,6 +465,8 @@ enum XPIcons {
             paths = [line([(24, 18.8), (24, 26.2)]), line([(20.3, 22.5), (27.7, 22.5)])]
         case .arrow:
             paths = [line([(20, 22.5), (27.5, 22.5)]), line([(24.2, 19), (27.7, 22.5), (24.2, 26)])]
+        case .copy:
+            paths = [poly([(20.5, 19.5), (25, 19.5), (25, 24), (20.5, 24)]), poly([(23, 22), (27.5, 22), (27.5, 26.5), (23, 26.5)])]
         }
         for path in paths {
             path.lineCapStyle = .round
@@ -485,6 +523,190 @@ enum XPIcons {
         p.fill(rr(7, 8, 18, 20, 0.5), 0xFFFFFF, 0xFFFFFF)
         textLines(p, color: 0x6AA6E8, from: 13)
         p.fill(rr(11, 1.5, 10, 6, 1.5), 0x7A7A7A, 0x5A5A5A)
+    }
+
+    // MARK: Особые папки и лента Windows 10
+
+    private enum FolderGlyph { case downloads, music, pictures, videos }
+
+    /// Папка со значком содержимого на передней стенке, как «Загрузки» или «Музыка» в Windows 10.
+    private static func specialFolder(_ p: Pen, _ glyph: FolderGlyph) {
+        folder(p, paper: .none)
+        switch glyph {
+        case .downloads:
+            for path in [line([(16, 13.5), (16, 22)]), line([(12, 18.5), (16, 22.5), (20, 18.5)]), line([(11, 24.3), (21, 24.3)])] {
+                path.lineCapStyle = .round
+                p.line(path, accent, width: 2.2)
+            }
+        case .music:
+            p.fill(oval(11, 20.5, 5.4, 4), accent, accent)
+            p.fill(NSBezierPath(rect: NSRect(x: 15, y: 13.5, width: 1.5, height: 9)), accent, accent)
+            p.fill(poly([(15, 13.5), (21, 15.5), (21, 18), (16.5, 16.3)]), accent, accent)
+        case .pictures:
+            landscape(p, NSRect(x: 10, y: 14, width: 12, height: 9.5))
+        case .videos:
+            p.fill(rr(10, 14, 12, 9.5, 1), 0x3C3C3C, 0x3C3C3C)
+            NSColor.white.setFill()
+            poly([(14.5, 16.3), (14.5, 21.2), (18.7, 18.75)]).fill()
+        }
+    }
+
+    private static func star(_ p: Pen) {
+        let path = NSBezierPath()
+        for i in 0..<10 {
+            let radius: CGFloat = i % 2 == 0 ? 14 : 5.8
+            let angle = (CGFloat(i) * 36 - 90) * .pi / 180
+            let point = NSPoint(x: 16 + radius * cos(angle), y: 17 + radius * sin(angle))
+            i == 0 ? path.move(to: point) : path.line(to: point)
+        }
+        path.close()
+        p.fill(path, 0x2B8BE6, accent)
+    }
+
+    /// Канцелярская кнопка «Закрепить», наклонённая как в Windows 10.
+    private static func pin(_ p: Pen) {
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        transform.translateX(by: 16, yBy: 16)
+        transform.rotate(byDegrees: 45)
+        transform.translateX(by: -16, yBy: -16)
+        transform.concat()
+        p.fill(rr(11, 3, 10, 4, 1), 0x2B8BE6, 0x2B8BE6)
+        p.fill(poly([(12.5, 7), (19.5, 7), (21, 16), (11, 16)]), 0x5AA8EE, accent)
+        p.fill(rr(8, 16, 16, 3, 1), accent, 0x005A9E)
+        let needle = line([(16, 19), (16, 29)])
+        needle.lineCapStyle = .round
+        p.line(needle, 0x7A7A7A, width: 1.6)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private static func scissors(_ p: Pen) {
+        for path in [line([(12.5, 21), (21.5, 4)]), line([(19.5, 21), (10.5, 4)])] {
+            path.lineCapStyle = .round
+            p.line(path, 0x7A7A7A, width: 2)
+        }
+        p.line(oval(5.5, 20, 8, 8), accent, width: 2.2)
+        p.line(oval(18.5, 20, 8, 8), accent, width: 2.2)
+    }
+
+    private static func paste(_ p: Pen) {
+        p.fill(rr(3, 4, 20, 25, 2), 0xB7834A, 0xA0703A)
+        p.fill(rr(8, 1.5, 10, 5.5, 1.5), 0x7A7A7A, 0x5A5A5A)
+        let sheet = poly([(12, 11), (24.5, 11), (29, 15.5), (29, 30.5), (12, 30.5)])
+        p.fill(sheet, 0xFFFFFF, 0xFAFAFA)
+        p.stroke(sheet, 0xB4B4B4, width: 0.8)
+        for (i, w) in [11, 9, 11, 7].enumerated() {
+            let y = 17 + CGFloat(i) * 3.2
+            p.line(line([(15, y), (15 + CGFloat(w), y)]), 0x6AA6E8, width: 1.3)
+        }
+    }
+
+    private static func properties(_ p: Pen) {
+        page(p)
+        let check = line([(10, 18.5), (14.5, 23), (22.5, 13)])
+        check.lineCapStyle = .round
+        p.line(check, 0xD13438, width: 2.8)
+    }
+
+    /// Четыре квадрата: закрашенные — выделенные.
+    private static func selection(_ p: Pen, filled: Set<Int>) {
+        for (i, (x, y)) in ([(4, 4), (17, 4), (4, 17), (17, 17)] as [(CGFloat, CGFloat)]).enumerated() {
+            let box = rr(x, y, 11, 11, 1)
+            if filled.contains(i) {
+                p.fill(box, accent, accent)
+            } else {
+                box.setLineDash([2, 1.5], count: 2, phase: 0)
+                p.stroke(box, 0x7A7A7A, width: 1.2)
+            }
+        }
+    }
+
+    private static func share(_ p: Pen) {
+        p.line(line([(5, 13), (5, 27), (27, 27), (27, 19)]), ink, width: 2)
+        let arrow = NSBezierPath()
+        arrow.move(to: NSPoint(x: 10, y: 22))
+        arrow.curve(to: NSPoint(x: 23, y: 8.5), controlPoint1: NSPoint(x: 10.5, y: 13), controlPoint2: NSPoint(x: 16, y: 9))
+        arrow.lineCapStyle = .round
+        p.line(arrow, accent, width: 2.4)
+        let head = line([(17.5, 4.5), (24, 8.5), (19.5, 14.5)])
+        head.lineCapStyle = .round
+        p.line(head, accent, width: 2.4)
+    }
+
+    private static func envelope(_ p: Pen) {
+        let body = rr(3, 7, 26, 18, 1.5)
+        p.fill(body, 0xFFFFFF, 0xF2F2F2)
+        p.stroke(body, accent, width: 1.4)
+        p.line(line([(4, 8.3), (16, 18), (28, 8.3)]), accent, width: 1.4)
+    }
+
+    private static func navigationPane(_ p: Pen) {
+        let window = rr(3, 5, 26, 22, 1)
+        p.fill(window, 0xFFFFFF, 0xF4F4F4)
+        p.fill(NSBezierPath(rect: NSRect(x: 3, y: 5, width: 9, height: 22)), 0x9CC9F0, 0x7DB7EA)
+        p.stroke(window, 0x6A6A6A, width: 0.8)
+        for y in [10, 14, 18] as [CGFloat] { p.line(line([(15, y), (25, y)]), 0xB4B4B4, width: 1.3) }
+    }
+
+    private static func sortBy(_ p: Pen) {
+        for (y, w) in [(8, 12), (14.5, 9), (21, 6)] as [(CGFloat, CGFloat)] {
+            p.fill(NSBezierPath(rect: NSRect(x: 4, y: y, width: w, height: 2.6)), ink, ink)
+        }
+        for path in [line([(24, 5), (24, 26)]), line([(19.5, 21.5), (24, 26), (28.5, 21.5)])] {
+            path.lineCapStyle = .round
+            p.line(path, accent, width: 2.2)
+        }
+    }
+
+    private static func refresh(_ p: Pen) {
+        let arc = NSBezierPath()
+        arc.appendArc(withCenter: NSPoint(x: 16, y: 16), radius: 9.5, startAngle: -40, endAngle: 250, clockwise: false)
+        arc.lineCapStyle = .round
+        p.line(arc, ink, width: 2.4)
+        let angle: CGFloat = 250 * .pi / 180
+        let tip = NSPoint(x: 16 + 9.5 * cos(angle), y: 16 + 9.5 * sin(angle))
+        let tangent = NSPoint(x: -sin(angle), y: cos(angle)), normal = NSPoint(x: cos(angle), y: sin(angle))
+        NSColor(hex: ink).setFill()
+        poly([(tip.x + tangent.x * 5, tip.y + tangent.y * 5),
+              (tip.x + normal.x * 4, tip.y + normal.y * 4),
+              (tip.x - normal.x * 4, tip.y - normal.y * 4)]).fill()
+    }
+
+    private static func help(_ p: Pen) {
+        p.fill(oval(2, 2, 28, 28), accent, accent)
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: 20), .foregroundColor: NSColor.white]
+        let size = ("?" as NSString).size(withAttributes: attrs)
+        ("?" as NSString).draw(at: NSPoint(x: 16 - size.width / 2, y: 16 - size.height / 2), withAttributes: attrs)
+    }
+
+    private static func tilesView(_ p: Pen) {
+        for y in [4, 18] as [CGFloat] {
+            p.fill(rr(3, y, 10, 10, 1), accent, accent)
+            p.line(line([(16, y + 3), (29, y + 3)]), 0x7A7A7A, width: 1.6)
+            p.line(line([(16, y + 7.5), (25, y + 7.5)]), 0xB4B4B4, width: 1.6)
+        }
+    }
+
+    private static func iconsView(_ p: Pen) {
+        for x in [4, 13, 22] as [CGFloat] {
+            for y in [4, 13, 22] as [CGFloat] { p.fill(rr(x, y, 6.5, 6.5, 0.8), accent, accent) }
+        }
+    }
+
+    private static func listView(_ p: Pen) {
+        for x in [3, 17] as [CGFloat] {
+            for y in [5, 12, 19, 26] as [CGFloat] {
+                p.fill(NSBezierPath(rect: NSRect(x: x, y: y - 2, width: 4, height: 4)), accent, accent)
+                p.line(line([(x + 6, y), (x + 12, y)]), 0x7A7A7A, width: 1.6)
+            }
+        }
+    }
+
+    private static func detailsView(_ p: Pen) {
+        for y in [6, 13, 20, 27] as [CGFloat] {
+            p.fill(NSBezierPath(rect: NSRect(x: 3, y: y - 2, width: 4, height: 4)), accent, accent)
+            p.line(line([(10, y), (29, y)]), 0x7A7A7A, width: 1.6)
+        }
     }
 
     // MARK: Геометрия

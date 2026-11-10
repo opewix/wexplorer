@@ -1,8 +1,9 @@
 import AppKit
 
-/// Узел дерева: Рабочий стол → Мои документы / Мой компьютер → диски / Домашняя папка → папки.
+/// Узел дерева. XP: Рабочий стол → Мои документы / Мой компьютер → диски / Домашняя папка → папки.
+/// Windows 10: невидимый корень → Быстрый доступ (избранное и особые папки) / Этот компьютер.
 final class TreeNode {
-    enum Kind { case desktop, documents, computer, home, volume, folder }
+    enum Kind { case desktop, documents, computer, home, volume, folder, win10Root, quickAccess }
 
     let kind: Kind
     let url: URL?
@@ -20,16 +21,26 @@ final class TreeNode {
         TreeNode(kind: .desktop, url: Places.desktop, title: tr(.desktop))
     }
 
+    static func win10Root() -> TreeNode {
+        TreeNode(kind: .win10Root, url: nil, title: "")
+    }
+
     lazy var icon: NSImage = {
         if kind == .computer { return Places.computerIcon }
+        if kind == .quickAccess { return XPIcons.image(.quickAccess, size: 16) }
         return url.map { Places.icon($0) } ?? NSImage()
     }()
 
     var path: String? { url?.standardizedFileURL.path }
     var isLoaded: Bool { loaded != nil }
 
-    var location: Location {
-        kind == .computer ? .computer : .folder(url!)
+    /// nil — узел ничего не открывает («Быстрый доступ» только раскрывается).
+    var location: Location? {
+        switch kind {
+        case .computer: return .computer
+        case .win10Root, .quickAccess: return nil
+        default: return url.map { .folder($0) }
+        }
     }
 
     func children(showHidden: Bool) -> [TreeNode] {
@@ -42,10 +53,26 @@ final class TreeNode {
                 TreeNode(kind: .computer, url: nil, title: Places.computerTitle),
                 TreeNode(kind: .home, url: Places.home, title: Places.displayName(of: Places.home)),
             ] + folderNodes(showHidden)
+        case .computer where Theme.isWin10:
+            let folders = [Places.home, Places.desktop, Places.documents, Places.downloads, Places.music,
+                           Places.pictures, Places.movies]
+            result = folders.map { TreeNode(kind: .folder, url: $0, title: Places.displayName(of: $0)) }
+                + DirectoryLoader.volumes().map { TreeNode(kind: .volume, url: $0, title: Places.displayName(of: $0)) }
         case .computer:
             result = DirectoryLoader.volumes().map {
                 TreeNode(kind: .volume, url: $0, title: Places.displayName(of: $0))
             }
+        case .win10Root:
+            result = [
+                TreeNode(kind: .quickAccess, url: nil, title: tr(.quickAccess)),
+                TreeNode(kind: .computer, url: nil, title: Places.computerTitle),
+            ]
+        case .quickAccess:
+            // Избранное — это «закреплённые» папки; за ними стандартные, как в Windows 10.
+            var seen = Set<String>()
+            let urls = (Favorites.all + [Places.desktop, Places.downloads, Places.documents, Places.pictures])
+                .filter { seen.insert($0.standardizedFileURL.path).inserted }
+            result = urls.map { TreeNode(kind: .folder, url: $0, title: Places.displayName(of: $0)) }
         default:
             result = folderNodes(showHidden)
         }
@@ -67,13 +94,20 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
     var onSelect: ((Location) -> Void)?
     var onOpenInNewWindow: ((Location) -> Void)?
     var onDrop: (([URL], URL, Bool) -> Bool)?
+    /// Контекстное меню папки в дереве.
+    var menuProvider: ((Location) -> NSMenu?)?
     var showHidden = false {
         didSet { if oldValue != showHidden { reload() } }
     }
 
     private let outline = FolderOutlineView()
     private let scroll = NSScrollView()
-    private var root = TreeNode.desktop()
+    private var root = FolderTreeView.makeRoot()
+    let hover = RowHover()
+
+    private static func makeRoot() -> TreeNode {
+        Theme.isWin10 ? TreeNode.win10Root() : TreeNode.desktop()
+    }
     private var programmatic = false
 
     override init(frame: NSRect) {
@@ -84,15 +118,21 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
         outline.outlineTableColumn = column
         outline.headerView = nil
         outline.style = .plain
-        outline.rowHeight = 18
-        outline.indentationPerLevel = 14
+        outline.rowHeight = Theme.isWin10 ? Win10.rowHeight : 18
+        outline.indentationPerLevel = Theme.isWin10 ? 16 : 14
         outline.backgroundColor = .white
         outline.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         outline.dataSource = self
         outline.delegate = self
         outline.onOpenInNewWindow = { [weak self] row in
-            guard let node = self?.outline.item(atRow: row) as? TreeNode else { return }
-            self?.onOpenInNewWindow?(node.location)
+            guard let node = self?.outline.item(atRow: row) as? TreeNode, let location = node.location else { return }
+            self?.onOpenInNewWindow?(location)
+        }
+        hover.install(on: outline)
+        outline.hover = hover
+        outline.menuProvider = { [weak self] row in
+            guard let node = self?.outline.item(atRow: row) as? TreeNode, let location = node.location else { return nil }
+            return self?.menuProvider?(location)
         }
         outline.registerForDraggedTypes([.fileURL])
         outline.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
@@ -118,8 +158,13 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
 
     /// Перечитывает дерево с нуля (после «Обновить» или смены показа скрытых файлов).
     func reload() {
-        root = TreeNode.desktop()
+        root = Self.makeRoot()
+        hover.reset()
         outline.reloadData()
+        if Theme.isWin10 {
+            root.children(showHidden: showHidden).forEach { outline.expandItem($0) }
+            return
+        }
         outline.expandItem(root)
         if let computer = root.children(showHidden: showHidden).first(where: { $0.kind == .computer }) {
             outline.expandItem(computer)
@@ -158,8 +203,11 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
             return nil
         case .folder(let url):
             let target = url.standardizedFileURL.path
-            let anchors = [root] + top.filter { $0.kind == .documents || $0.kind == .home }
-                + (computer?.children(showHidden: showHidden) ?? [])
+            // В Windows 10 ищем под «Этим компьютером»: «Быстрый доступ» — лишь ярлыки на те же папки.
+            let anchors = Theme.isWin10
+                ? (computer?.children(showHidden: showHidden) ?? [])
+                : [root] + top.filter { $0.kind == .documents || $0.kind == .home }
+                    + (computer?.children(showHidden: showHidden) ?? [])
             let matching = anchors.filter { node in
                 guard let p = node.path else { return false }
                 return target == p || target.hasPrefix(p == "/" ? "/" : p + "/")
@@ -179,12 +227,15 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
     // MARK: NSOutlineViewDataSource
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        guard let node = item as? TreeNode else { return 1 }
+        // В Windows 10 корень невидим: сверху сразу «Быстрый доступ» и «Этот компьютер».
+        guard let node = item as? TreeNode else { return Theme.isWin10 ? root.children(showHidden: showHidden).count : 1 }
         return node.children(showHidden: showHidden).count
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        guard let node = item as? TreeNode else { return root }
+        guard let node = item as? TreeNode else {
+            return Theme.isWin10 ? root.children(showHidden: showHidden)[index] : root
+        }
         return node.children(showHidden: showHidden)[index]
     }
 
@@ -235,14 +286,58 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !programmatic, outline.selectedRow >= 0,
-              let node = outline.item(atRow: outline.selectedRow) as? TreeNode else { return }
-        onSelect?(node.location)
+              let node = outline.item(atRow: outline.selectedRow) as? TreeNode, let location = node.location else { return }
+        onSelect?(location)
     }
 }
 
 /// Cmd+щелчок или щелчок колёсиком по папке в дереве открывает её в новом окне.
 final class FolderOutlineView: NSOutlineView {
     var onOpenInNewWindow: ((Int) -> Void)?
+    var menuProvider: ((Int) -> NSMenu?)?
+    weak var hover: RowHover?
+
+    /// Правый щелчок по папке — её меню; выделение при этом не меняется, как в Проводнике.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        return row >= 0 ? menuProvider?(row) : nil
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        hover?.track(self, event: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hover?.track(self, event: nil)
+    }
+
+    /// Windows 10 рисует вместо треугольников тонкие шевроны › и ⌄.
+    override func makeView(withIdentifier identifier: NSUserInterfaceItemIdentifier, owner: Any?) -> NSView? {
+        let view = super.makeView(withIdentifier: identifier, owner: owner)
+        if Theme.isWin10, identifier == NSOutlineView.disclosureButtonIdentifier, let button = view as? NSButton {
+            button.image = Self.chevron(expanded: false)
+            button.alternateImage = Self.chevron(expanded: true)
+            button.imageScaling = .scaleNone
+        }
+        return view
+    }
+
+    private static func chevron(expanded: Bool) -> NSImage {
+        NSImage(size: NSSize(width: 12, height: 12), flipped: true) { _ in
+            let path = NSBezierPath()
+            if expanded {
+                path.move(to: NSPoint(x: 3, y: 4.5)); path.line(to: NSPoint(x: 6, y: 7.5)); path.line(to: NSPoint(x: 9, y: 4.5))
+            } else {
+                path.move(to: NSPoint(x: 4.5, y: 3)); path.line(to: NSPoint(x: 7.5, y: 6)); path.line(to: NSPoint(x: 4.5, y: 9))
+            }
+            path.lineWidth = 1.2
+            Win10.glyph.setStroke()
+            path.stroke()
+            return true
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         let row = self.row(at: convert(event.locationInWindow, from: nil))

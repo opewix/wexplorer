@@ -41,8 +41,10 @@ final class SidebarContainer: LunaView {
         taskPane.isHidden = mode != .tasks
         folderTree.isHidden = mode != .folders
         searchPane.isHidden = mode != .search
-        header.isHidden = mode == .tasks
-        headerHeight.constant = mode == .tasks ? 0 : 24
+        // В Windows 10 левая панель — только область навигации, без заголовка с крестиком.
+        let showsHeader = mode != .tasks && !Theme.isWin10
+        header.isHidden = !showsHeader
+        headerHeight.constant = showsHeader ? 24 : 0
         header.title = mode == .folders ? tr(.folders) : tr(.search)
     }
 }
@@ -121,9 +123,12 @@ final class SearchPaneView: LunaView {
             scope.widthAnchor.constraint(equalTo: stack.widthAnchor),
             nameLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
-        // Растянутые на всю ширину элементы не должны сжимать левую панель до своего размера.
+        // Растянутые на всю ширину элементы не должны ни растягивать левую панель, ни мешать её сузить.
         for v in [field, scope, nameLabel] as [NSView] {
             v.setContentHuggingPriority(.init(1), for: .horizontal)
+        }
+        for v in [title, field, scope, nameLabel, scopeLabel, button] as [NSView] {
+            v.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         }
     }
 

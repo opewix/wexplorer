@@ -107,9 +107,9 @@ enum Menus {
             item(tr(.upOneLevel), #selector(W.goUp(_:)), key(NSUpArrowFunctionKey)),
             .separator(),
             item(tr(.desktop), #selector(W.goDesktop(_:)), "d", [.command, .shift]),
-            item(tr(.myDocuments), #selector(W.goDocuments(_:)), "o", [.command, .shift]),
+            item(Places.displayName(of: Places.documents), #selector(W.goDocuments(_:)), "o", [.command, .shift]),
             item(tr(.homeFolder), #selector(W.goHome(_:)), "h", [.command, .shift]),
-            item(tr(.myComputer), #selector(W.goComputer(_:)), "c", [.command, .shift]),
+            item(Places.computerTitle, #selector(W.goComputer(_:)), "c", [.command, .shift]),
             .separator(),
             item(tr(.goToFolder), #selector(W.goToFolder(_:)), "l"),
         ]
@@ -119,7 +119,7 @@ enum Menus {
         var items: [NSMenuItem] = [
             submenu(tr(.explorerBar), [
                 item(tr(.search), #selector(W.toggleSearch(_:)), "f"),
-                item(tr(.folders), #selector(W.toggleFolders(_:)), "f", [.command, .option]),
+                item(Theme.isWin10 ? tr(.navigationPane) : tr(.folders), #selector(W.toggleFolders(_:)), "f", [.command, .option]),
             ]),
             .separator(),
         ]
@@ -132,7 +132,18 @@ enum Menus {
         ]
         if includeGo { items.append(submenu(tr(.menuGo), goItems())) }
         items.append(item(tr(.refresh), #selector(W.refresh(_:)), "r"))
+        items += [.separator(), themeMenu()]
         return menu(tr(.menuView), items)
+    }
+
+    /// «Тема ▸ Windows XP / Windows 10». Окна пересобираются сразу, перезапуск не нужен.
+    static func themeMenu() -> NSMenuItem {
+        submenu(tr(.theme), Theme.allCases.map { theme in
+            let item = Menus.item(theme.title, #selector(AppDelegate.setTheme(_:)))
+            item.representedObject = theme.rawValue
+            item.state = theme == Theme.current ? .on : .off
+            return item
+        })
     }
 
     static func favorites() -> NSMenu {

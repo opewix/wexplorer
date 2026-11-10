@@ -151,6 +151,10 @@ extension MainWindowController: NSMenuItemValidation {
         browser.invertSelection()
     }
 
+    @objc func selectNone(_ sender: Any?) {
+        browser.select(IndexSet())
+    }
+
     @objc func copyToFolder(_ sender: Any?) {
         chooseFolder(for: .copy)
     }
@@ -174,19 +178,55 @@ extension MainWindowController: NSMenuItemValidation {
         panel.directoryURL = location.url
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let dest = panel.url, let self else { return }
-            self.ops.transfer(urls, to: dest, kind: kind) { _ in
-                self.reload(preserveSelection: kind == .copy)
-            }
+            self.transfer(urls, to: dest, kind: kind)
         }
+    }
+
+    private func transfer(_ urls: [URL], to dest: URL, kind: FileOperations.Kind) {
+        ops.transfer(urls, to: dest, kind: kind) { [weak self] _ in
+            self?.reload(preserveSelection: kind == .copy)
+        }
+    }
+
+    /// «Переместить в ▾» / «Копировать в ▾» ленты: папка — в representedObject пункта.
+    @objc func moveToPlace(_ sender: NSMenuItem) {
+        guard let dest = sender.representedObject as? URL, !selectedURLs.isEmpty else { return }
+        transfer(selectedURLs, to: dest, kind: .move)
+    }
+
+    @objc func copyToPlace(_ sender: NSMenuItem) {
+        guard let dest = sender.representedObject as? URL, !selectedURLs.isEmpty else { return }
+        transfer(selectedURLs, to: dest, kind: .copy)
+    }
+
+    // MARK: Поделиться
+
+    /// Системное меню «Поделиться». Из ленты — под кнопкой, из меню — у списка файлов.
+    @objc func shareSelection(_ sender: Any?) {
+        share(from: (sender as? NSView) ?? browser)
+    }
+
+    func share(from view: NSView) {
+        let urls = browser.selectedItems.map(\.url)
+        guard !urls.isEmpty else { return }
+        NSSharingServicePicker(items: urls).show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
+    }
+
+    private var emailService: NSSharingService? { NSSharingService(named: .composeEmail) }
+
+    private var attachableURLs: [URL] {
+        browser.selectedItems.filter { !$0.isDirectory }.map(\.url)
+    }
+
+    @objc func emailSelection(_ sender: Any?) {
+        emailService?.perform(withItems: attachableURLs)
     }
 
     // MARK: Вид
 
     @objc func setViewMode(_ sender: NSMenuItem) {
         guard let mode = ViewMode(rawValue: sender.tag) else { return }
-        settings.viewMode = mode
-        settings.save()
-        browser.mode = mode
+        applyViewMode(mode)
     }
 
     @objc func sortBy(_ sender: NSMenuItem) {
@@ -206,11 +246,19 @@ extension MainWindowController: NSMenuItemValidation {
         updateChrome()
     }
 
+    /// В Windows 10 «Папки» — это область навигации: она показывается или прячется целиком.
     @objc func toggleFolders(_ sender: Any?) {
+        if Theme.isWin10 { return toggleNavigationPane(sender) }
         setSidebarMode(sidebar.mode == .folders ? .tasks : .folders)
     }
 
+    @objc func toggleNavigationPane(_ sender: Any?) {
+        setNavigationPaneHidden(!sidebar.isHidden)
+    }
+
+    /// В Windows 10 поиск — поле справа от адреса, отдельной панели нет.
     @objc func toggleSearch(_ sender: Any?) {
+        if Theme.isWin10 { return navBar.search.focus() }
         setSidebarMode(sidebar.mode == .search ? .tasks : .search)
     }
 
@@ -244,7 +292,7 @@ extension MainWindowController: NSMenuItemValidation {
     @objc func goComputer(_ sender: Any?) { navigate(to: .computer) }
 
     @objc func goToFolder(_ sender: Any?) {
-        address.focus()
+        Theme.isWin10 ? navBar.address.focus() : address.focus()
     }
 
     // MARK: Избранное
@@ -254,6 +302,14 @@ extension MainWindowController: NSMenuItemValidation {
         let urls = selectedFolders.isEmpty ? [location.url].compactMap { $0 } : selectedFolders
         urls.forEach(Favorites.add)
         if !urls.isEmpty { status.leftText = tr(.addedToFavorites, urls.map(Places.displayName).joined(separator: ", ")) }
+        favoritesChanged()
+    }
+
+    /// Избранное — это «Быстрый доступ» в области навигации Windows 10.
+    private func favoritesChanged() {
+        guard Theme.isWin10 else { return }
+        sidebar.folderTree.reload()
+        sidebar.folderTree.reveal(location)
     }
 
     @objc func openFavorite(_ sender: NSMenuItem) {
@@ -264,6 +320,7 @@ extension MainWindowController: NSMenuItemValidation {
     @objc func removeFavorite(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         Favorites.remove(url)
+        favoritesChanged()
     }
 
     // MARK: Сервис и справка
@@ -401,6 +458,20 @@ extension MainWindowController: NSMenuItemValidation {
             return location.url != nil && pasteboardHasFiles
         case #selector(selectAll(_:)), #selector(invertSelection(_:)):
             return !browser.items.isEmpty
+        case #selector(selectNone(_:)):
+            return !selected.isEmpty
+        case #selector(moveToPlace(_:)), #selector(copyToPlace(_:)):
+            return !isEditingText && editable
+        case #selector(shareSelection(_:)):
+            return !selected.isEmpty
+        case #selector(emailSelection(_:)):
+            let files = attachableURLs
+            return !files.isEmpty && emailService?.canPerform(withItems: files) == true
+        case #selector(archiveAddToZip(_:)):
+            return !selected.isEmpty && !selected.contains { $0.isVolume } && ArchiveKind(rawValue: item.tag)?.archiver != nil
+        case #selector(toggleNavigationPane(_:)):
+            item.state = sidebar.isHidden ? .off : .on
+            return true
         case #selector(setViewMode(_:)):
             item.state = item.tag == settings.viewMode.rawValue ? .on : .off
             return true
@@ -411,7 +482,7 @@ extension MainWindowController: NSMenuItemValidation {
             item.state = settings.showHidden ? .on : .off
             return true
         case #selector(toggleFolders(_:)):
-            item.state = sidebar.mode == .folders ? .on : .off
+            item.state = (Theme.isWin10 ? !sidebar.isHidden : sidebar.mode == .folders) ? .on : .off
             return true
         case #selector(toggleSearch(_:)):
             item.state = sidebar.mode == .search ? .on : .off
