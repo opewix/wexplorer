@@ -94,6 +94,7 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
     var onSelect: ((Location) -> Void)?
     var onOpenInNewWindow: ((Location) -> Void)?
     var onDrop: (([URL], URL, Bool) -> Bool)?
+    var onRightDrop: (([URL], URL, NSDragOperation) -> Void)?
     /// Контекстное меню папки в дереве.
     var menuProvider: ((Location) -> NSMenu?)?
     var showHidden = false {
@@ -263,6 +264,10 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
         guard let node = item as? TreeNode, let url = node.url else { return false }
         let operation = DropRules.operation(info, into: url)
         guard !operation.isEmpty else { return false }
+        if DropRules.isRightDrag(info) {
+            onRightDrop?(DropRules.urls(info), url, operation)
+            return true
+        }
         return onDrop?(DropRules.urls(info), url, operation == .copy) ?? false
     }
 

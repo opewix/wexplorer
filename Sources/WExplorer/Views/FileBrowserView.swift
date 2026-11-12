@@ -13,6 +13,8 @@ protocol FileBrowserDelegate: AnyObject {
     func browserRename(_ index: Int, to name: String?)
     func browserSortDidChange(_ key: SortKey, ascending: Bool)
     func browserDrop(_ urls: [URL], into folder: URL, copy: Bool) -> Bool
+    /// Бросили то, что тянули правой кнопкой: спросить меню, что сделать.
+    func browserRightDrop(_ urls: [URL], into folder: URL, suggested: NSDragOperation)
 }
 
 /// Список файлов: «Таблица» — на NSTableView, остальные виды — на NSCollectionView.
@@ -39,6 +41,8 @@ final class FileBrowserView: LunaView {
     private var renamingIndex: Int?
     private var renameCancelled = false
     private var updatingSort = false
+    private var typedPrefix = ""
+    private var lastTypeTime: TimeInterval = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -57,6 +61,10 @@ final class FileBrowserView: LunaView {
             ])
         }
         applyMode()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(cutFilesDidChange), name: CutFiles.didChange, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(extensionsDidChange), name: FileExtensions.didChange, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -69,6 +77,8 @@ final class FileBrowserView: LunaView {
         table.rowHeight = Theme.isWin10 ? Win10.rowHeight : 18
         table.intercellSpacing = NSSize(width: 0, height: 0)
         table.allowsMultipleSelection = true
+        // Поиск по первым буквам свой (`typeSelect`) — один на все виды.
+        table.allowsTypeSelect = false
         table.allowsEmptySelection = true
         table.backgroundColor = .white
         table.gridStyleMask = []
@@ -164,6 +174,30 @@ final class FileBrowserView: LunaView {
 
     // MARK: Данные и выделение
 
+    /// Расширения спрятали или показали — имена перерисовываются, выделение остаётся.
+    @objc private func extensionsDidChange() {
+        guard !isRenaming else { return }
+        let selected = selectedItems.map(\.url)
+        table.reloadData()
+        collection.reloadData()
+        select(urls: selected)
+    }
+
+    /// Буфер обмена сменился — перерисовать значки видимых файлов (вырезанные бледнеют).
+    @objc private func cutFilesDidChange() {
+        let nameColumn = table.column(withIdentifier: NSUserInterfaceItemIdentifier(SortKey.name.columnID))
+        if nameColumn >= 0 {
+            let rows = table.rows(in: table.visibleRect)
+            for row in rows.lowerBound..<rows.upperBound where row < items.count {
+                (table.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NameCellView)?
+                    .setCut(CutFiles.contains(items[row].url))
+            }
+        }
+        for indexPath in collection.indexPathsForVisibleItems() where indexPath.item < items.count {
+            (collection.item(at: indexPath) as? IconItem)?.setCut(CutFiles.contains(items[indexPath.item].url))
+        }
+    }
+
     func setItems(_ newItems: [FileItem], selecting urls: [URL]) {
         renamingIndex = nil
         items = newItems
@@ -235,9 +269,12 @@ final class FileBrowserView: LunaView {
         cell.beginEditing()
         field.delegate = self
         window?.makeFirstResponder(field)
-        let name = items[index].name as NSString
+        // Спрятанное расширение не показывается и при переименовании — выделяется всё имя.
+        let item = items[index]
+        let name = item.displayName as NSString
         let ext = name.pathExtension as NSString
-        let length = items[index].isDirectory || ext.length == 0 ? name.length : name.length - ext.length - 1
+        let length = item.isDirectory || item.hiddenExtension != nil || ext.length == 0
+            ? name.length : name.length - ext.length - 1
         field.currentEditor()?.selectedRange = NSRange(location: 0, length: length)
     }
 
@@ -245,21 +282,83 @@ final class FileBrowserView: LunaView {
         let item = items[index]
         let alert = NSAlert()
         alert.messageText = tr(.renameTitle)
-        alert.informativeText = tr(.renamePrompt, item.name)
-        let field = NSTextField(string: item.name)
+        alert.informativeText = tr(.renamePrompt, item.displayName)
+        let field = NSTextField(string: item.displayName)
         field.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
         alert.accessoryView = field
         alert.addButton(withTitle: tr(.ok))
         alert.addButton(withTitle: tr(.cancel))
         alert.window.initialFirstResponder = field
         let ok = alert.runModal() == .alertFirstButtonReturn
-        delegate?.browserRename(index, to: ok ? field.stringValue : nil)
+        delegate?.browserRename(index, to: ok ? item.fullName(fromEdited: field.stringValue) : nil)
     }
 
     // MARK: Для FileTableView / FileCollectionView
 
     func handleKey(_ event: NSEvent) -> Bool {
-        delegate?.browserHandleKey(event) ?? false
+        delegate?.browserHandleKey(event) == true || typeSelect(event)
+    }
+
+    // MARK: Поиск по первым буквам
+
+    /// Как в Проводнике: набранные подряд (с паузой меньше секунды) буквы выделяют первый объект,
+    /// имя которого так начинается; одна и та же буква несколько раз — перебор объектов на эту букву.
+    /// Работает во всех видах и сравнивает с именем, как оно показано (без спрятанного расширения).
+    private func typeSelect(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+              let chars = event.characters, !chars.isEmpty, !items.isEmpty,
+              chars.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7f && !(0xF700...0xF8FF).contains($0.value) })
+        else { return false }
+        if event.timestamp - lastTypeTime > 1 { typedPrefix = "" }
+        lastTypeTime = event.timestamp
+        if typedPrefix.isEmpty && chars == " " { return false }
+        typedPrefix += chars
+        let lowered = typedPrefix.lowercased()
+        let repeated = lowered.count > 1 && Set(lowered).count == 1
+        let prefix = repeated ? String(typedPrefix.prefix(1)) : typedPrefix
+        // Первая буква и повтор ищут со следующего объекта, продолжение слова — с текущего.
+        let fromNext = typedPrefix.count == 1 || repeated
+        let start = selectedIndexes.first.map { fromNext ? $0 + 1 : $0 } ?? 0
+        let order = Array(min(start, items.count)..<items.count) + Array(0..<min(start, items.count))
+        if let match = order.first(where: {
+            items[$0].displayName.range(of: prefix, options: [.caseInsensitive, .anchored]) != nil
+        }) {
+            select(IndexSet(integer: match))
+        }
+        return true
+    }
+
+    // MARK: Перетаскивание правой кнопкой
+
+    /// После нажатия правой кнопки на объекте: отпустили на месте — nil (будет контекстное меню),
+    /// повели — событие сдвига, с которого начинается перетаскивание.
+    static func waitForRightDrag(in window: NSWindow?, from down: NSEvent) -> NSEvent? {
+        let start = down.locationInWindow
+        while let event = window?.nextEvent(matching: [.rightMouseDragged, .rightMouseUp]) {
+            if event.type == .rightMouseUp { return nil }
+            if hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > 4 { return event }
+        }
+        return nil
+    }
+
+    /// Тянет выделенные объекты правой кнопкой. В данных — отметка `DropRules.rightDragMarker`:
+    /// по ней место, куда бросили, показывает меню «Копировать / Переместить / Создать ярлыки».
+    func beginRightDrag(with event: NSEvent, in view: NSView) {
+        let dragged = selectedItems.filter { !$0.isVolume }
+        guard !dragged.isEmpty else { return }
+        let point = view.convert(event.locationInWindow, from: nil)
+        let step: CGFloat = view.isFlipped ? 6 : -6
+        let items = dragged.enumerated().map { index, item -> NSDraggingItem in
+            let data = NSPasteboardItem()
+            data.setString(item.url.absoluteString, forType: .fileURL)
+            data.setData(Data(), forType: DropRules.rightDragMarker)
+            let dragging = NSDraggingItem(pasteboardWriter: data)
+            let offset = CGFloat(min(index, 4)) * step
+            dragging.setDraggingFrame(NSRect(x: point.x - 16 + abs(offset), y: point.y - 16 + offset, width: 32, height: 32),
+                                      contents: item.icon)
+            return dragging
+        }
+        view.beginDraggingSession(with: items, event: event, source: self)
     }
 
     func contextMenu(onItem: Bool) -> NSMenu? {
@@ -323,6 +422,10 @@ final class FileBrowserView: LunaView {
     fileprivate func performDrop(_ info: NSDraggingInfo, into folder: URL) -> Bool {
         let operation = DropRules.operation(info, into: folder)
         guard !operation.isEmpty else { return false }
+        if DropRules.isRightDrag(info) {
+            delegate?.browserRightDrop(DropRules.urls(info), into: folder, suggested: operation)
+            return true
+        }
         return delegate?.browserDrop(DropRules.urls(info), into: folder, copy: operation == .copy) ?? false
     }
 }
@@ -337,7 +440,7 @@ extension FileBrowserView: NSTableViewDataSource, NSTableViewDelegate {
         let item = items[row]
         if column.identifier.rawValue == SortKey.name.columnID {
             let cell = tableView.makeView(withIdentifier: NameCellView.id, owner: self) as? NameCellView ?? NameCellView(leading: 6)
-            cell.configure(name: item.name, icon: item.icon)
+            cell.configure(name: item.displayName, icon: item.icon, isCut: CutFiles.contains(item.url))
             return cell
         }
         let cell = tableView.makeView(withIdentifier: TextCellView.id, owner: self) as? TextCellView ?? TextCellView()
@@ -465,8 +568,11 @@ extension FileBrowserView: NSTextFieldDelegate {
         guard let field = obj.object as? NSTextField, let index = renamingIndex else { return }
         renamingIndex = nil
         (field.superview as? NameCellView)?.endEditing()
-        let newName = field.stringValue
-        if index < items.count { field.stringValue = items[index].name }
+        var newName = field.stringValue
+        if index < items.count {
+            newName = items[index].fullName(fromEdited: newName)
+            field.stringValue = items[index].displayName
+        }
         let cancelled = renameCancelled
         let movement = obj.userInfo?["NSTextMovement"] as? Int
         DispatchQueue.main.async { [weak self] in
@@ -538,6 +644,18 @@ final class FileTableView: NSTableView {
         browser?.openInNewWindow(row(at: convert(event.locationInWindow, from: nil)))
     }
 
+    /// Правая кнопка на строке: повели — перетаскивание с меню в конце, отпустили — контекстное меню.
+    override func rightMouseDown(with event: NSEvent) {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        guard row >= 0, let browser, !browser.isRenaming,
+              let drag = FileBrowserView.waitForRightDrag(in: window, from: event) else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        if !selectedRowIndexes.contains(row) { selectRowIndexes([row], byExtendingSelection: false) }
+        browser.beginRightDrag(with: drag, in: self)
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
         if row >= 0 {
@@ -595,6 +713,20 @@ final class FileCollectionView: NSCollectionView {
         }
     }
 
+    /// Правая кнопка на значке: повели — перетаскивание с меню в конце, отпустили — контекстное меню.
+    override func rightMouseDown(with event: NSEvent) {
+        guard let indexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil)), let browser,
+              let drag = FileBrowserView.waitForRightDrag(in: window, from: event) else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        if !selectionIndexPaths.contains(indexPath) {
+            selectionIndexPaths = [indexPath]
+            browser.notifySelection()
+        }
+        browser.beginRightDrag(with: drag, in: self)
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let indexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil))
         if let indexPath {
@@ -635,5 +767,14 @@ final class LeftAlignedFlowLayout: NSCollectionViewFlowLayout {
         guard scrollDirection == .vertical else { return base }
         let row = NSRect(x: 0, y: base.frame.minY, width: collectionViewContentSize.width, height: base.frame.height)
         return layoutAttributesForElements(in: row).first { $0.indexPath == indexPath } ?? base
+    }
+}
+
+// MARK: - Источник перетаскивания правой кнопкой
+
+extension FileBrowserView: NSDraggingSource {
+    func draggingSession(_ session: NSDraggingSession,
+                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        [.copy, .move]
     }
 }

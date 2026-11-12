@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Menus.main()
+        CutFiles.startWatching()
+        FileExtensions.observeOtherInstances()
         // Экземпляр, запущенный другим экземпляром, открывается там, куда его послали.
         openWindow(at: Instances.startLocation ?? Self.startLocation(), frame: Instances.startFrame)
         Instances.observeTheme { [weak self] theme in self?.apply(theme) }

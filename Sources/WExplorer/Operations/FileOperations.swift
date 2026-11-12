@@ -184,6 +184,79 @@ final class FileOperations {
         return true
     }
 
+    /// Удаление мимо корзины (Shift+Delete). Отменить его нельзя, поэтому подтверждение — всегда.
+    /// Удаляет в фоне с окном прогресса: большая папка удаляется не мгновенно.
+    func deletePermanently(_ urls: [URL], completion: @escaping () -> Void) {
+        guard !urls.isEmpty, Alerts.confirmPermanentDelete(urls) else { return }
+        let progress = ProgressPanel(title: tr(.deleting), parent: window)
+        progress.showAfterDelay()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fm = FileManager()
+            var errors: [String] = []
+            for (index, url) in urls.enumerated() {
+                if progress.isCancelled { break }
+                DispatchQueue.main.async {
+                    progress.update(index: index, total: urls.count, source: url, destination: nil)
+                }
+                do {
+                    try fm.removeItem(at: url)
+                } catch {
+                    errors.append("«\(url.lastPathComponent)»: \(error.localizedDescription)")
+                }
+            }
+            DispatchQueue.main.async {
+                progress.close()
+                if !errors.isEmpty {
+                    Alerts.error(tr(.cannotDelete, urls.count == 1 ? urls[0].lastPathComponent : "…"),
+                                 info: errors.prefix(10).joined(separator: "\n"))
+                }
+                completion()
+            }
+        }
+    }
+
+    /// Ярлыки (в macOS — псевдонимы Finder) для объектов в папке. Имя — как в Windows:
+    /// «Ярлык для X» в XP, «X — ярлык» в Windows 10. Возвращает созданные ярлыки.
+    @discardableResult
+    func createShortcuts(_ urls: [URL], in folder: URL) -> [URL] {
+        var created: [URL] = []
+        for src in urls {
+            let target = uniqueShortcutURL(for: src, in: folder)
+            do {
+                let data = try src.bookmarkData(options: .suitableForBookmarkFile,
+                                                includingResourceValuesForKeys: nil, relativeTo: nil)
+                try URL.writeBookmarkData(data, to: target)
+                created.append(target)
+            } catch {
+                Alerts.error(tr(.cannotCreateShortcut, src.lastPathComponent), info: error.localizedDescription)
+            }
+        }
+        if !created.isEmpty {
+            let made = created
+            undoManager?.registerUndo(withTarget: self) { ops in
+                _ = ops.trash(made, confirm: false, actionName: tr(.actionCreateShortcut))
+            }
+            undoManager?.setActionName(tr(.actionCreateShortcut))
+        }
+        return created
+    }
+
+    private func uniqueShortcutURL(for src: URL, in folder: URL) -> URL {
+        let name = src.lastPathComponent
+        var n = 1
+        while true {
+            let title: String
+            if Theme.isWin10 {
+                title = n == 1 ? tr(.nameShortcut, name) : tr(.nameShortcutNumbered, name, n)
+            } else {
+                title = n == 1 ? tr(.shortcutTo, name) : tr(.shortcutToNumbered, name, n)
+            }
+            let candidate = folder.appendingPathComponent(title)
+            if !fm.fileExists(atPath: candidate.path) { return candidate }
+            n += 1
+        }
+    }
+
     func rename(_ url: URL, to newName: String) -> URL? {
         let name = newName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name != url.lastPathComponent else { return nil }

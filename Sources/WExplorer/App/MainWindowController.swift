@@ -148,6 +148,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebar.folderTree.onDrop = { [weak self] urls, folder, copy in
             self?.browserDrop(urls, into: folder, copy: copy) ?? false
         }
+        sidebar.folderTree.onRightDrop = { [weak self] urls, folder, suggested in
+            self?.showRightDropMenu(urls, into: folder, suggested: suggested)
+        }
         sidebar.folderTree.menuProvider = { [weak self] location in self?.treeMenu(for: location) }
 
         browser.delegate = self
@@ -591,13 +594,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func open(_ items: [FileItem]) {
         guard !items.isEmpty else { return }
-        if items.count == 1, items[0].isDirectory {
-            navigate(to: .folder(items[0].url))
+        // Ярлык папки открывается здесь же, как сама папка; ярлык файла — программой файла.
+        let targets = items.map { $0.shortcutFolder ?? ($0.isDirectory ? $0.url : nil) }
+        if items.count == 1, let folder = targets[0] {
+            navigate(to: .folder(folder))
             return
         }
-        for item in items {
-            if item.isDirectory {
-                openNewWindow(at: .folder(item.url))
+        for (item, folder) in zip(items, targets) {
+            if let folder {
+                openNewWindow(at: .folder(folder))
             } else {
                 FileOpener.open(item.url)
             }
@@ -627,8 +632,8 @@ extension MainWindowController: FileBrowserDelegate {
 
     func browserOpenInNewWindow(_ index: Int) {
         let item = browser.items[index]
-        if item.isDirectory {
-            openNewWindow(at: .folder(item.url))
+        if let folder = item.shortcutFolder ?? (item.isDirectory ? item.url : nil) {
+            openNewWindow(at: .folder(folder))
         } else {
             FileOpener.open(item.url)
         }
@@ -645,6 +650,19 @@ extension MainWindowController: FileBrowserDelegate {
             return true
         case 117 where flags.isEmpty:  // Forward Delete — в корзину
             moveToTrash(nil)
+            return true
+        case 117 where flags == .shift, 51 where flags == .shift:  // Shift+Delete — мимо корзины, как в Windows
+            deletePermanently(nil)
+            return true
+        // Ctrl+X/C/V — привычка из Windows, вдобавок к Cmd. По физической клавише — работает и в русской раскладке.
+        case 7 where flags == .control:
+            cut(nil)
+            return true
+        case 8 where flags == .control:
+            copy(nil)
+            return true
+        case 9 where flags == .control:
+            paste(nil)
             return true
         case 96:  // F5 — обновить
             refresh(nil)
@@ -664,6 +682,7 @@ extension MainWindowController: FileBrowserDelegate {
         if onItem {
             let selected = browser.selectedItems
             return Menus.itemContext(hasFolder: selected.contains { $0.isDirectory },
+                                     openWith: OpenWithMenu.item(for: openWithURLs),
                                      archives: Menus.archiveMenus(for: selected))
         }
         return location.url == nil ? nil : Menus.backgroundContext()
@@ -685,6 +704,10 @@ extension MainWindowController: FileBrowserDelegate {
         settings.ascending = ascending
         rememberFolderView()
         resort()
+    }
+
+    func browserRightDrop(_ urls: [URL], into folder: URL, suggested: NSDragOperation) {
+        showRightDropMenu(urls, into: folder, suggested: suggested)
     }
 
     func browserDrop(_ urls: [URL], into folder: URL, copy: Bool) -> Bool {

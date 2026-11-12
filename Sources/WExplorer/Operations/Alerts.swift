@@ -53,6 +53,23 @@ enum Alerts {
         }
     }
 
+    /// Удаление мимо корзины. «Нет» — по умолчанию: восстановить удалённое будет нельзя.
+    static func confirmPermanentDelete(_ urls: [URL]) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        if urls.count == 1 {
+            let isDir = (try? urls[0].resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            alert.messageText = isDir ? tr(.confirmDeleteFolderTitle) : tr(.confirmDeleteFileTitle)
+            alert.informativeText = tr(.confirmDeletePermanentOne, urls[0].lastPathComponent)
+        } else {
+            alert.messageText = tr(.confirmDeleteManyTitle)
+            alert.informativeText = tr(.confirmDeletePermanentMany, urls.count)
+        }
+        alert.addButton(withTitle: tr(.yes)).keyEquivalent = ""
+        alert.addButton(withTitle: tr(.no)).keyEquivalent = "\r"
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     static func confirmTrash(_ urls: [URL]) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning

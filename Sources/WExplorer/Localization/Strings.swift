@@ -136,4 +136,18 @@ enum Str: String, CaseIterable {
 
     // Смена языка
     case languageChangedTitle, languageChangedText, restartNow
+
+    // «Открыть с помощью»
+    case openWith, openWithDefault, openWithOther, openWithNoApps, cannotOpenWith
+
+    // Удаление без корзины
+    case deletePermanently, confirmDeletePermanentOne, confirmDeletePermanentMany, deleting
+
+    // Расширения имён файлов
+    case hideExtensions, fileNameExtensions
+
+    // Перетаскивание правой кнопкой и ярлыки
+    case dropCopyHere, dropMoveHere, dropShortcutsHere, dropCancel
+    case shortcutTo, shortcutToNumbered, nameShortcut, nameShortcutNumbered
+    case cannotCreateShortcut, actionCreateShortcut
 }

@@ -2,8 +2,6 @@ import AppKit
 
 /// Команды меню, тулбара и панели задач. Все они доступны через цепочку ответчиков.
 extension MainWindowController: NSMenuItemValidation {
-    /// Тип в буфере обмена, которым помечены вырезанные (а не скопированные) файлы.
-    static let cutMarker = NSPasteboard.PasteboardType("dev.oleg.wexplorer.cut")
     private var selectedURLs: [URL] {
         browser.selectedItems.filter { !$0.isVolume }.map(\.url)
     }
@@ -101,10 +99,11 @@ extension MainWindowController: NSMenuItemValidation {
         let items = urls.enumerated().map { index, url -> NSPasteboardItem in
             let item = NSPasteboardItem()
             item.setString(url.absoluteString, forType: .fileURL)
-            if cut && index == 0 { item.setData(Data(), forType: Self.cutMarker) }
+            if cut && index == 0 { item.setData(Data(), forType: CutFiles.marker) }
             return item
         }
         pasteboard.writeObjects(items)
+        CutFiles.refresh()
         status.leftText = cut
             ? tr(.cutStatus, urls.count)
             : tr(.copiedStatus, urls.count)
@@ -112,7 +111,7 @@ extension MainWindowController: NSMenuItemValidation {
 
     @objc func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
-        let isCut = pasteboard.pasteboardItems?.contains { $0.types.contains(Self.cutMarker) } == true
+        let isCut = pasteboard.pasteboardItems?.contains { $0.types.contains(CutFiles.marker) } == true
         pasteFiles(move: isCut)
     }
 
@@ -129,7 +128,10 @@ extension MainWindowController: NSMenuItemValidation {
         else { return }
         ops.transfer(urls, to: dest, kind: move ? .move : .copy) { [weak self] created in
             guard let self else { return }
-            if move { pasteboard.clearContents() }
+            if move {
+                pasteboard.clearContents()
+                CutFiles.refresh()
+            }
             self.pendingSelection = created
             self.reload(preserveSelection: true)
         }
@@ -413,7 +415,7 @@ extension MainWindowController: NSMenuItemValidation {
     private func detailEntries(_ selected: [FileItem]) -> [TaskEntry] {
         if selected.count == 1 {
             let item = selected[0]
-            var entries: [TaskEntry] = [.heading(item.name), .text(item.typeName)]
+            var entries: [TaskEntry] = [.heading(item.displayName), .text(item.typeName)]
             if let detail = item.detail { entries.append(.text(detail)) }
             if let modified = item.modified { entries.append(.text(tr(.modifiedAt, Format.date(modified)))) }
             if !item.isDirectory, let size = item.size { entries.append(.text(tr(.sizeIs, Format.size(size)))) }
@@ -451,6 +453,16 @@ extension MainWindowController: NSMenuItemValidation {
             return !isEditingText && !selected.isEmpty
         case #selector(openInNewWindow(_:)):
             return selected.contains { $0.isDirectory }
+        case #selector(deletePermanently(_:)):
+            return !isEditingText && editable
+        case #selector(openWithOther(_:)), #selector(openWithApp(_:)):
+            return !openWithURLs.isEmpty
+        case #selector(toggleHideExtensions(_:)):
+            item.state = FileExtensions.hidden ? .on : .off
+            return true
+        case #selector(toggleShowExtensions(_:)):
+            item.state = FileExtensions.hidden ? .off : .on
+            return true
         case #selector(moveToTrash(_:)), #selector(cut(_:)), #selector(copyToFolder(_:)), #selector(moveToFolder(_:)):
             return !isEditingText && editable
         case #selector(copy(_:)):

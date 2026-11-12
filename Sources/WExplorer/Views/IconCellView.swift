@@ -19,6 +19,11 @@ final class IconItem: NSCollectionViewItem {
         cell.mode = mode
         cell.image = image
         cell.isSelected = isSelected
+        cell.isCut = CutFiles.contains(item.url)
+    }
+
+    func setCut(_ isCut: Bool) {
+        cell.isCut = isCut
     }
 
     func setImage(_ image: NSImage) {
@@ -32,6 +37,8 @@ final class IconCellView: LunaView {
     var mode: ViewMode = .icons { didSet { needsDisplay = true } }
     var image: NSImage? { didSet { needsDisplay = true } }
     var isSelected = false { didSet { needsDisplay = true } }
+    /// Вырезанный файл: значок рисуется бледным.
+    var isCut = false { didSet { if oldValue != isCut { needsDisplay = true } } }
     private var isHovered = false { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
@@ -60,7 +67,7 @@ final class IconCellView: LunaView {
         switch mode {
         case .icons:
             drawImage(in: NSRect(x: (w - 32) / 2, y: 4, width: 32, height: 32))
-            drawLabel(item.name, in: NSRect(x: 2, y: 40, width: w - 4, height: h - 40), lines: 2, centered: true)
+            drawLabel(item.displayName, in: NSRect(x: 2, y: 40, width: w - 4, height: h - 40), lines: 2, centered: true)
 
         case .thumbnails:
             let frame = NSRect(x: (w - 104) / 2, y: 2, width: 104, height: 104)
@@ -75,19 +82,19 @@ final class IconCellView: LunaView {
                 ? frame.insetBy(dx: 5, dy: 5)
                 : NSRect(x: frame.midX - 24, y: frame.midY - 24, width: 48, height: 48)
             drawImage(in: target, tint: false)
-            drawLabel(item.name, in: NSRect(x: 2, y: 110, width: w - 4, height: h - 110), lines: 2, centered: true)
+            drawLabel(item.displayName, in: NSRect(x: 2, y: 110, width: w - 4, height: h - 110), lines: 2, centered: true)
 
         case .tiles:
             drawImage(in: NSRect(x: 4, y: (h - 48) / 2, width: 48, height: 48))
             let x: CGFloat = 58
             let textWidth = w - x - 4
-            drawLabel(item.name, in: NSRect(x: x, y: 6, width: textWidth, height: 16), lines: 1, centered: false)
+            drawLabel(item.displayName, in: NSRect(x: x, y: 6, width: textWidth, height: 16), lines: 1, centered: false)
             drawSecondary(item.typeName, in: NSRect(x: x, y: 22, width: textWidth, height: 14))
             drawSecondary(tileDetail(item), in: NSRect(x: x, y: 36, width: textWidth, height: 14))
 
         case .list:
             drawImage(in: NSRect(x: 2, y: 1, width: 16, height: 16))
-            drawLabel(item.name, in: NSRect(x: 21, y: 2, width: w - 23, height: 15), lines: 1, centered: false)
+            drawLabel(item.displayName, in: NSRect(x: 21, y: 2, width: w - 23, height: 15), lines: 1, centered: false)
 
         case .details:
             break
@@ -103,7 +110,7 @@ final class IconCellView: LunaView {
     private func drawImage(in rect: NSRect, tint: Bool = true) {
         guard let image else { return }
         let target = LunaButton.fit(image.size, in: rect)
-        image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        image.draw(in: target, from: .zero, operation: .sourceOver, fraction: isCut ? 0.5 : 1, respectFlipped: true, hints: nil)
         if isSelected && tint && !win10Selection {
             Luna.selection.withAlphaComponent(0.45).setFill()
             target.fill(using: .sourceAtop)

@@ -34,10 +34,16 @@ final class NameCellView: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(name: String, icon: NSImage) {
+    func configure(name: String, icon: NSImage, isCut: Bool = false) {
         endEditing()
         textField?.stringValue = name
         imageView?.image = icon
+        setCut(isCut)
+    }
+
+    /// Вырезанный файл — бледный значок, подпись как обычно.
+    func setCut(_ isCut: Bool) {
+        imageView?.alphaValue = isCut ? 0.5 : 1
     }
 
     func beginEditing() {

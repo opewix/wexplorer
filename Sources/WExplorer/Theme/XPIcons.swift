@@ -50,6 +50,7 @@ enum XPIcons {
     static func icon(for item: FileItem, size: CGFloat = 32) -> NSImage {
         if item.isVolume { return image(volumeKind(item.url), size: size) }
         if item.isDirectory { return image(folderKind(item.url), size: size) }
+        if item.contentType?.conforms(to: .aliasFile) == true { return shortcutIcon(item.url, size: size) }
         guard let kind = fileKind(item.contentType, ext: item.url.pathExtension) else {
             return systemIcon(item.url, size: size)
         }
@@ -63,6 +64,40 @@ enum XPIcons {
         if values?.isDirectory == true && values?.isPackage != true { return image(folderKind(url), size: size) }
         guard let kind = fileKind(values?.contentType, ext: url.pathExtension) else { return systemIcon(url, size: size) }
         return image(kind, size: size)
+    }
+
+    /// Ярлык: значок цели со стрелкой в белом квадратике в левом нижнем углу, как в Windows.
+    private static func shortcutIcon(_ url: URL, size: CGFloat) -> NSImage {
+        let target = (try? URL(resolvingAliasFileAt: url)).map { FileItem(url: $0) }
+        let base = target.map { icon(for: $0, size: size) } ?? systemIcon(url, size: size)
+        return NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+            base.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            let side = max(7, (size * 0.4).rounded())
+            let box = NSRect(x: 0, y: size - side, width: side, height: side)
+            NSColor.white.setFill()
+            box.fill()
+            NSColor(white: 0.55, alpha: 1).setStroke()
+            NSBezierPath(rect: box.insetBy(dx: 0.5, dy: 0.5)).stroke()
+            // Изогнутая стрелка вверх-вправо.
+            let inset = side * 0.22
+            let arrow = NSBezierPath()
+            arrow.move(to: NSPoint(x: box.minX + inset, y: box.maxY - inset))
+            arrow.curve(to: NSPoint(x: box.maxX - inset, y: box.minY + inset),
+                        controlPoint1: NSPoint(x: box.minX + inset, y: box.midY),
+                        controlPoint2: NSPoint(x: box.midX, y: box.minY + inset))
+            arrow.lineWidth = max(1, side * 0.14)
+            NSColor(calibratedRed: 0.1, green: 0.35, blue: 0.85, alpha: 1).setStroke()
+            arrow.stroke()
+            let head = NSBezierPath()
+            let tip = NSPoint(x: box.maxX - inset * 0.6, y: box.minY + inset)
+            head.move(to: tip)
+            head.line(to: NSPoint(x: tip.x - side * 0.32, y: tip.y - side * 0.12))
+            head.line(to: NSPoint(x: tip.x - side * 0.2, y: tip.y + side * 0.28))
+            head.close()
+            NSColor(calibratedRed: 0.1, green: 0.35, blue: 0.85, alpha: 1).setFill()
+            head.fill()
+            return true
+        }
     }
 
     private static func systemIcon(_ url: URL, size: CGFloat) -> NSImage {

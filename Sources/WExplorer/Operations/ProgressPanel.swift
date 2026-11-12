@@ -81,11 +81,12 @@ final class ProgressPanel: NSObject {
         }
     }
 
-    func update(index: Int, total: Int, source: URL, destination: URL) {
+    /// destination == nil — операция без места назначения (удаление): показывается только папка источника.
+    func update(index: Int, total: Int, source: URL, destination: URL?) {
         guard !isCancelled else { return }
         nameLabel.stringValue = source.lastPathComponent
-        pathLabel.stringValue =
-            tr(.progressFromTo, source.deletingLastPathComponent().lastPathComponent, destination.lastPathComponent)
+        let from = source.deletingLastPathComponent().lastPathComponent
+        pathLabel.stringValue = destination.map { tr(.progressFromTo, from, $0.lastPathComponent) } ?? from
         bar.doubleValue = Double(index) / Double(max(total, 1))
     }
 

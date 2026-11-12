@@ -20,8 +20,11 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 - **Folder tree** with drag & drop, a context menu and a resizable divider.
 - **Views:** Thumbnails, Tiles, Icons, List and Details, with QuickLook thumbnails. Each folder
   remembers its own view and sort order; the width of the left pane is remembered too.
-- **File operations:** copy, cut & paste, drag & drop to and from Finder, rename in place (F2),
-  move to Trash, undo (⌘Z), name conflict dialog, progress window.
+- **File operations:** copy, cut & paste (cut files are shown with faded icons until pasted), drag & drop to and from Finder, rename in place (F2),
+  move to Trash or delete permanently (Shift+Delete), undo (⌘Z), name conflict dialog, progress window.
+- **Open With** submenu, **right-button drag** with a Copy / Move / Create Shortcuts menu (shortcuts
+  are Finder aliases), typing a name's first letters to jump to it, and optionally hidden extensions
+  for known file types.
 - **Archives:** extract and create zip, 7z and tar out of the box. If
   [7-Zip](https://www.7-zip.org/) is installed (`brew install sevenzip`), WExplorer can use it for
   more formats and for creating password-protected archives.
@@ -30,7 +33,7 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
   new window runs as its own instance, like separate Explorer windows on the Windows taskbar;
   cut & paste and theme changes work across instances.
 - **Languages:** English and Russian (Tools → Language).
-- macOS keyboard shortcuts (⌘C / ⌘X / ⌘V) instead of Ctrl.
+- macOS keyboard shortcuts (⌘C / ⌘X / ⌘V); in the file list Ctrl+C / Ctrl+X / Ctrl+V work too.
 
 ## Install
 

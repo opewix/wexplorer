@@ -64,6 +64,7 @@ enum Menus {
             item(tr(.showInFinder), #selector(W.showInFinder(_:))),
             .separator(),
             item(tr(.delete), #selector(W.moveToTrash(_:)), key(NSBackspaceCharacter)),
+            item(tr(.deletePermanently), #selector(W.deletePermanently(_:)), key(NSBackspaceCharacter), [.command, .option]),
             item(tr(.rename), #selector(W.renameSelection(_:)), key(NSF2FunctionKey), []),
             item(tr(.properties), #selector(W.showProperties(_:)), "i"),
             .separator(),
@@ -166,6 +167,7 @@ enum Menus {
             item(tr(.showInFinder), #selector(W.showInFinder(_:))),
             .separator(),
             item(tr(.showHiddenFiles), #selector(W.toggleHidden(_:))),
+            item(tr(.hideExtensions), #selector(W.toggleHideExtensions(_:))),
             .separator(),
             item(tr(.systemSettings), #selector(W.openSystemSettings(_:))),
             .separator(),
@@ -193,10 +195,11 @@ enum Menus {
 
     // MARK: Контекстные меню
 
-    static func itemContext(hasFolder: Bool, archives: [NSMenuItem]) -> NSMenu {
+    static func itemContext(hasFolder: Bool, openWith: NSMenuItem?, archives: [NSMenuItem]) -> NSMenu {
         let open = item(tr(.open), #selector(W.openSelection(_:)))
         open.attributedTitle = NSAttributedString(string: tr(.open), attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
         var items = [open]
+        if let openWith { items.append(openWith) }
         if hasFolder { items.append(item(tr(.openInNewWindow), #selector(W.openInNewWindow(_:)))) }
         items.append(item(tr(.showInFinder), #selector(W.showInFinder(_:))))
         if !archives.isEmpty { items += [.separator()] + archives }

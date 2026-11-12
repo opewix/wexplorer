@@ -18,6 +18,9 @@ final class FileItem {
     let detail: String?
 
     private(set) lazy var icon: NSImage = XPIcons.icon(for: self)
+    /// Расширение, которое прячется при «Скрывать расширения…» (см. `FileExtensions`).
+    private(set) lazy var knownExtension: String? =
+        FileExtensions.knownExtension(name: name, isDirectory: isDirectory, isVolume: isVolume, contentType: contentType)
 
     static let resourceKeys: [URLResourceKey] = [
         .isDirectoryKey, .isPackageKey, .fileSizeKey, .contentModificationDateKey,
@@ -83,6 +86,16 @@ final class FileItem {
 }
 
 extension FileItem {
+    var isShortcut: Bool { contentType?.conforms(to: .aliasFile) == true }
+
+    /// Папка, на которую ведёт ярлык (псевдоним Finder), или nil — не ярлык или ведёт на файл.
+    var shortcutFolder: URL? {
+        guard isShortcut, let target = try? URL(resolvingAliasFileAt: url),
+              let values = try? target.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey]),
+              values.isDirectory == true, values.isPackage != true else { return nil }
+        return target
+    }
+
     /// Сортировка как в XP: папки всегда выше файлов.
     static func sorted(_ items: [FileItem], by key: SortKey, ascending: Bool) -> [FileItem] {
         items.sorted { a, b in

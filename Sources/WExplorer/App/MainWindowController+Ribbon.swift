@@ -72,7 +72,10 @@ extension MainWindowController {
                     .large(Command(tr(.sortBy), .sortBy, nil, menu: { Menus.menu("", Menus.sortItems()) })),
                 ]),
                 RibbonGroup(title: tr(.groupShowHide), items: [
-                    .checks([Command(tr(.hiddenItems), nil, #selector(toggleHidden(_:)))]),
+                    .checks([
+                        Command(tr(.fileNameExtensions), nil, #selector(toggleShowExtensions(_:))),
+                        Command(tr(.hiddenItems), nil, #selector(toggleHidden(_:))),
+                    ]),
                 ]),
             ]),
         ]

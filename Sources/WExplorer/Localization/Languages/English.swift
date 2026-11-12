@@ -118,15 +118,18 @@ extension Language {
             Cmd+↑ — up one level,  Cmd+↓ — open
             Cmd+L — go to folder (address bar)
 
-            Cmd+C / Cmd+X / Cmd+V — copy / cut / paste
+            Cmd+C / Cmd+X / Cmd+V — copy / cut / paste (Ctrl too in the file list)
             Cmd+Option+V — move here
             Cmd+Option+C — copy path
             Cmd+Backspace or Fn+Delete — move to Trash
+            Shift+Delete, Shift+Fn+Delete or Cmd+Option+Backspace — delete permanently
             F2 — rename
             Cmd+Shift+N — new folder
             Cmd+Z / Cmd+Shift+Z — undo / redo
             Cmd+I — properties
 
+            Letters — jump to the item whose name starts with them
+            Right-button drag — Copy / Move / Create Shortcuts menu
             Cmd+double-click, middle click — open folder in a new window
             Cmd+click in the folder tree or Other Places — open in a new window
 
@@ -387,5 +390,34 @@ extension Language {
         .languageChangedTitle: "Interface language changed",
         .languageChangedText: "The new language will be applied after {0} restarts.",
         .restartNow: "Restart Now",
+
+        // Open With
+        .openWith: "Open With",
+        .openWithDefault: "{0} (default)",
+        .openWithOther: "Choose Program...",
+        .openWithNoApps: "No suitable programs",
+        .cannotOpenWith: "Could not open with “{0}”",
+
+        // Permanent delete
+        .deletePermanently: "Delete Permanently",
+        .confirmDeletePermanentOne: "Are you sure you want to permanently delete “{0}”? It cannot be restored.",
+        .confirmDeletePermanentMany: "Are you sure you want to permanently delete these {0} items? They cannot be restored.",
+        .deleting: "Deleting...",
+
+        // File name extensions
+        .hideExtensions: "Hide Extensions for Known File Types",
+        .fileNameExtensions: "File name extensions",
+
+        // Right-button drag and shortcuts
+        .dropCopyHere: "Copy Here",
+        .dropMoveHere: "Move Here",
+        .dropShortcutsHere: "Create Shortcuts Here",
+        .dropCancel: "Cancel",
+        .shortcutTo: "Shortcut to {0}",
+        .shortcutToNumbered: "Shortcut ({1}) to {0}",
+        .nameShortcut: "{0} - Shortcut",
+        .nameShortcutNumbered: "{0} - Shortcut ({1})",
+        .cannotCreateShortcut: "Could not create a shortcut to “{0}”",
+        .actionCreateShortcut: "Create Shortcut",
     ])
 }
