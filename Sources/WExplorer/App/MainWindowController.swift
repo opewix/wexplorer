@@ -418,7 +418,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             if isDir.boolValue && !Places.isPackage(url) {
                 navigate(to: .folder(url))
             } else {
-                NSWorkspace.shared.open(url)
+                FileOpener.open(url)
                 address.show(location)
             }
             focusList()
@@ -570,7 +570,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             if item.isDirectory {
                 openNewWindow(at: .folder(item.url))
             } else {
-                NSWorkspace.shared.open(item.url)
+                FileOpener.open(item.url)
             }
         }
     }
@@ -601,7 +601,7 @@ extension MainWindowController: FileBrowserDelegate {
         if item.isDirectory {
             openNewWindow(at: .folder(item.url))
         } else {
-            NSWorkspace.shared.open(item.url)
+            FileOpener.open(item.url)
         }
     }
 

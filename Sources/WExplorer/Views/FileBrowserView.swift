@@ -505,6 +505,35 @@ final class FileTableView: NSTableView {
         super.keyDown(with: event)
     }
 
+    /// Рамка выделения: NSTableView при протягивании по пустому месту выделяет строки, но рамку
+    /// не рисует. Рамку начинает нажатие мимо строк, а в XP ещё и мимо колонки «Имя» — там в
+    /// «Таблице» к файлу относится только имя. Простой щелчок отдаём таблице как был.
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard event.clickCount == 1, browser?.isRenaming == false, startsMarquee(at: point) else {
+            super.mouseDown(with: event)
+            return
+        }
+        window?.makeFirstResponder(self)
+        let result = Marquee.track(in: self, from: event, selected: selectedRowIndexes, items: { rect in
+            let range = self.rows(in: rect)
+            return IndexSet(integersIn: range.location..<(range.location + range.length))
+        }, apply: { selection in
+            self.selectRowIndexes(selection, byExtendingSelection: false)
+        })
+        if case .click(let up) = result {
+            window?.postEvent(up, atStart: true)
+            super.mouseDown(with: event)
+        }
+    }
+
+    private func startsMarquee(at point: NSPoint) -> Bool {
+        guard row(at: point) >= 0 else { return true }
+        guard !Theme.isWin10 else { return false }
+        let column = self.column(at: point)
+        return column < 0 || tableColumns[column].identifier.rawValue != SortKey.name.columnID
+    }
+
     override func otherMouseDown(with event: NSEvent) {
         browser?.openInNewWindow(row(at: convert(event.locationInWindow, from: nil)))
     }
@@ -528,7 +557,27 @@ final class FileCollectionView: NSCollectionView {
         super.keyDown(with: event)
     }
 
+    /// Рамку по пустому месту ведём сами, как в таблице, — чтобы во всех видах она была одна.
     override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if event.clickCount == 1, indexPathForItem(at: point) == nil {
+            window?.makeFirstResponder(self)
+            let selected = IndexSet(selectionIndexPaths.map(\.item))
+            let result = Marquee.track(in: self, from: event, selected: selected, items: { rect in
+                let hit = (self.collectionViewLayout?.layoutAttributesForElements(in: rect) ?? [])
+                    .filter { $0.representedElementCategory == .item && $0.frame.intersects(rect) }
+                    .compactMap { $0.indexPath?.item }
+                return IndexSet(hit)
+            }, apply: { selection in
+                self.selectionIndexPaths = Set(selection.map { IndexPath(item: $0, section: 0) })
+                self.browser?.notifySelection()
+            })
+            if case .click = result, event.modifierFlags.intersection([.command, .shift]).isEmpty {
+                selectionIndexPaths = []
+                browser?.notifySelection()
+            }
+            return
+        }
         super.mouseDown(with: event)
         if event.clickCount == 2,
            let indexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil)) {
