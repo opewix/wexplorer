@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build -c release
 APP="build/WExplorer.app"
-VERSION="${VERSION:-0.4}"
+VERSION="${VERSION:-0.11}"
 rm -rf "$APP"
 # Языки интерфейса берём из Sources/WExplorer/Localization/Languages/*.swift (code: "xx").
 LANGS=($(grep -ho 'code: "[a-zA-Z-]*"' Sources/WExplorer/Localization/Languages/*.swift | cut -d'"' -f2))
@@ -19,7 +19,7 @@ cp .build/release/WExplorer "$APP/Contents/MacOS/WExplorer"
 # Иконка приложения: рисуем из нашего набора и собираем .icns.
 ICONSET=build/AppIcon.iconset
 rm -rf "$ICONSET"
-swiftc -O -o build/appicon scripts/appicon/main.swift Sources/WExplorer/Theme/*.swift Sources/WExplorer/Model/*.swift Sources/WExplorer/Localization/*.swift Sources/WExplorer/Localization/Languages/*.swift
+swiftc -O -o build/appicon scripts/appicon/main.swift
 build/appicon "$ICONSET"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
