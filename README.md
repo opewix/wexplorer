@@ -18,7 +18,8 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
     breadcrumb address bar with subfolder menus and search-as-you-type, Quick access and This PC
     navigation pane, flat light-blue selection, status bar with view switches.
 - **Folder tree** with drag & drop, a context menu and a resizable divider.
-- **Views:** Thumbnails, Tiles, Icons, List and Details, with QuickLook thumbnails.
+- **Views:** Thumbnails, Tiles, Icons, List and Details, with QuickLook thumbnails. Each folder
+  remembers its own view and sort order; the width of the left pane is remembered too.
 - **File operations:** copy, cut & paste, drag & drop to and from Finder, rename in place (F2),
   move to Trash, undo (⌘Z), name conflict dialog, progress window.
 - **Archives:** extract and create zip, 7z and tar out of the box. If

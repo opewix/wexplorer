@@ -2,7 +2,7 @@ import AppKit
 
 /// Окно проводника: текущее место, история, настройки; связывает все панели между собой.
 /// Рамка окна — родная macOS, содержимое — в стиле XP или Windows 10 (`Theme.current`).
-final class MainWindowController: NSWindowController, NSWindowDelegate {
+final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
     // Панели XP
     let menuBar = MenuBarView()
     let toolbar = ToolbarView()
@@ -47,9 +47,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         ops = FileOperations(window: window)
         window.contentView = buildContent()
         connect()
-        browser.mode = settings.viewMode
-        status.mode = settings.viewMode
-        browser.setSortIndicator(settings.sortKey, ascending: settings.ascending)
+        browser.mode = FolderViews.view(for: location).mode
         sidebar.folderTree.showHidden = settings.showHidden
         navigate(to: location, recordHistory: false)
         window.initialFirstResponder = browser.activeView
@@ -59,11 +57,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Раскладка
 
-    private var sidebarWidth: CGFloat { Theme.isWin10 ? Win10.sidebarWidth : Luna.sidebarWidth }
+    /// Ширина левой панели: та, что оставил пользователь, иначе ширина темы по умолчанию.
+    private var sidebarWidth: CGFloat {
+        SidebarWidth.saved(Theme.current) ?? (Theme.isWin10 ? Win10.sidebarWidth : Luna.sidebarWidth)
+    }
+    private var restoringSidebarWidth = false
 
     private func buildContent() -> NSView {
         split.isVertical = true
         split.dividerStyle = .thin
+        split.delegate = self
         // NSSplitView запоминает начальную ширину панели как «запасной размер» — задаём её заранее.
         sidebar.frame = NSRect(x: 0, y: 0, width: sidebarWidth, height: 400)
         split.addArrangedSubview(sidebar)
@@ -214,7 +217,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     func applyInitialSidebarWidth() {
         window?.layoutIfNeeded()
         guard !sidebar.isHidden else { return }
+        restoringSidebarWidth = true
         split.setPosition(sidebarWidth, ofDividerAt: 0)
+        restoringSidebarWidth = false
+    }
+
+    /// Запоминает ширину левой панели, когда её меняет пользователь перетаскиванием разделителя;
+    /// изменение размера окна разделитель не двигает и сюда не попадает.
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard !restoringSidebarWidth, !sidebar.isHidden,
+              notification.userInfo?["NSSplitViewDividerIndex"] != nil,
+              sidebar.frame.width > 0 else { return }
+        SidebarWidth.save(sidebar.frame.width, Theme.current)
     }
 
     /// Показать или скрыть область навигации (Windows 10). Скрытая панель сворачивается в ноль.
@@ -246,6 +260,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             settings.lastPath = url.path
             settings.save()
         }
+        // Результаты поиска показываются тем видом, что был в папке, откуда искали.
+        if case .search = newLocation {} else { showFolderView(FolderViews.view(for: newLocation)) }
         scrollToTopOnApply = true
         browser.setItems([], selecting: [])
         reload(preserveSelection: false)
@@ -521,10 +537,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     func applyViewMode(_ mode: ViewMode) {
         settings.viewMode = mode
-        settings.save()
+        rememberFolderView()
         browser.mode = mode
         status.mode = mode
         if Theme.isWin10 { ribbon.refresh() }
+    }
+
+    /// Вид и сортировка места, куда перешли.
+    private func showFolderView(_ view: FolderView) {
+        settings.folderView = view
+        if browser.mode != view.mode { browser.mode = view.mode }
+        status.mode = view.mode
+        browser.setSortIndicator(view.sortKey, ascending: view.ascending)
+    }
+
+    /// Запомнить вид и сортировку за текущей папкой.
+    func rememberFolderView() {
+        FolderViews.remember(settings.folderView, for: location)
     }
 
     // MARK: Левая панель и поиск
@@ -654,7 +683,7 @@ extension MainWindowController: FileBrowserDelegate {
     func browserSortDidChange(_ key: SortKey, ascending: Bool) {
         settings.sortKey = key
         settings.ascending = ascending
-        settings.save()
+        rememberFolderView()
         resort()
     }
 

@@ -236,7 +236,7 @@ extension MainWindowController: NSMenuItemValidation {
         guard let key = SortKey(rawValue: sender.tag) else { return }
         settings.ascending = key == settings.sortKey ? !settings.ascending : true
         settings.sortKey = key
-        settings.save()
+        rememberFolderView()
         browser.setSortIndicator(key, ascending: settings.ascending)
         resort()
     }
