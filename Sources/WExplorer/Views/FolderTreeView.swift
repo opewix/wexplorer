@@ -81,6 +81,30 @@ final class TreeNode {
         return result
     }
 
+    /// Уже прочитанные дочерние узлы (nil — узел ещё не раскрывали).
+    var loadedChildren: [TreeNode]? { loaded }
+
+    /// Сверяет прочитанные вложенные папки с диском. Уцелевшие узлы остаются теми же объектами,
+    /// чтобы дерево не теряло их раскрытие. true — список изменился.
+    func refreshFolders(showHidden: Bool) -> Bool {
+        guard let loaded, let url else { return false }
+        switch kind {
+        case .folder, .home, .documents, .volume, .desktop: break
+        default: return false
+        }
+        let fixed = loaded.filter { $0.kind != .folder }
+        var old: [String: TreeNode] = [:]
+        for node in loaded where node.kind == .folder { if let p = node.path { old[p] = node } }
+        let folders = DirectoryLoader.subfolders(of: url, showHidden: showHidden).map {
+            old[$0.standardizedFileURL.path] ?? TreeNode(kind: .folder, url: $0, title: $0.lastPathComponent)
+        }
+        let result = fixed + folders
+        guard result.map(ObjectIdentifier.init) != loaded.map(ObjectIdentifier.init) else { return false }
+        result.forEach { $0.parent = self }
+        self.loaded = result
+        return true
+    }
+
     private func folderNodes(_ showHidden: Bool) -> [TreeNode] {
         guard let url else { return [] }
         return DirectoryLoader.subfolders(of: url, showHidden: showHidden).map {
@@ -169,6 +193,31 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
         outline.expandItem(root)
         if let computer = root.children(showHidden: showHidden).first(where: { $0.kind == .computer }) {
             outline.expandItem(computer)
+        }
+    }
+
+    /// Перечитывает вложенные папки у всех уже раскрытых узлов этой папки
+    /// (после создания, переименования или удаления папки внутри неё).
+    func refresh(_ url: URL) {
+        let target = url.standardizedFileURL.path
+        var changed: [TreeNode] = []
+        var stack = root.loadedChildren ?? []
+        if root.path == target { stack.append(root) }
+        var visited = Set<ObjectIdentifier>()
+        while let node = stack.popLast() {
+            guard visited.insert(ObjectIdentifier(node)).inserted else { continue }
+            if node.path == target, node.refreshFolders(showHidden: showHidden) { changed.append(node) }
+            stack += node.loadedChildren ?? []
+        }
+        guard !changed.isEmpty else { return }
+        programmatic = true
+        defer { programmatic = false }
+        let selected = outline.selectedRow >= 0 ? outline.item(atRow: outline.selectedRow) as AnyObject? : nil
+        hover.reset()
+        changed.forEach { outline.reloadItem($0, reloadChildren: true) }
+        if let selected {
+            let row = outline.row(forItem: selected)
+            if row >= 0 { outline.selectRowIndexes([row], byExtendingSelection: false) } else { outline.deselectAll(nil) }
         }
     }
 

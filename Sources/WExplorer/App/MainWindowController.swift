@@ -286,7 +286,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 DispatchQueue.main.async { [weak self] in
                     guard let self, generation == self.loadGeneration else { return }
                     switch result {
-                    case .success(let items): self.apply(items)
+                    case .success(let items):
+                        self.apply(items)
+                        self.sidebar.folderTree.refresh(url)
                     case .failure(let error): self.handleLoadError(error, url: url)
                     }
                 }
