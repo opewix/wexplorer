@@ -84,18 +84,20 @@ enum Instances {
 
     // MARK: Смена темы во всех экземплярах
 
+    /// Тема и шрифт уходят вместе: получатель применяет то, что у него отличается.
     static func broadcast(_ theme: Theme) {
         DistributedNotificationCenter.default().postNotificationName(
             themeChanged, object: theme.rawValue,
-            userInfo: ["pid": Int(ProcessInfo.processInfo.processIdentifier)], deliverImmediately: true)
+            userInfo: ["pid": Int(ProcessInfo.processInfo.processIdentifier), "windowsFont": Fonts.windows],
+            deliverImmediately: true)
     }
 
-    static func observeTheme(_ handler: @escaping (Theme) -> Void) {
+    static func observeTheme(_ handler: @escaping (Theme, Bool) -> Void) {
         DistributedNotificationCenter.default().addObserver(forName: themeChanged, object: nil, queue: .main) { note in
             let pid = note.userInfo?["pid"] as? Int
             guard pid != Int(ProcessInfo.processInfo.processIdentifier),
                   let raw = note.object as? String, let theme = Theme(rawValue: raw) else { return }
-            handler(theme)
+            handler(theme, note.userInfo?["windowsFont"] as? Bool ?? Fonts.windows)
         }
     }
 }

@@ -54,6 +54,8 @@ extension FileItem {
     /// Полное имя из того, что ввели при переименовании: спрятанное расширение возвращается на место.
     func fullName(fromEdited edited: String) -> String {
         guard let ext = hiddenExtension else { return edited }
+        // Стёртое имя — не переименование: иначе файл стал бы «.txt» и пропал как скрытый.
+        guard !edited.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
         return edited + "." + ext
     }
 }

@@ -133,8 +133,15 @@ enum Menus {
         ]
         if includeGo { items.append(submenu(tr(.menuGo), goItems())) }
         items.append(item(tr(.refresh), #selector(W.refresh(_:)), "r"))
-        items += [.separator(), themeMenu(), separateInstancesItem()]
+        items += [.separator(), themeMenu(), windowsFontItem(), separateInstancesItem()]
         return menu(tr(.menuView), items)
+    }
+
+    /// Tahoma (или установленный пользователем Segoe UI) вместо системного шрифта macOS.
+    static func windowsFontItem() -> NSMenuItem {
+        let item = item(tr(.windowsFont), #selector(AppDelegate.toggleWindowsFont(_:)))
+        item.state = Fonts.windows ? .on : .off
+        return item
     }
 
     /// Каждое новое окно — отдельный экземпляр программы со своей иконкой в Dock.

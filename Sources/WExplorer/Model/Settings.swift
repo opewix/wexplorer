@@ -84,10 +84,14 @@ struct Settings {
         return s
     }
 
-    func save() {
-        let d = Settings.defaults
-        d.set(showHidden, forKey: "showHidden")
-        d.set(lastPath, forKey: "lastPath")
+    /// Настройки общие на все окна и экземпляры, а копия у каждого окна своя — поэтому каждое
+    /// значение пишется только там, где его меняют: иначе окно со старой копией затирало бы чужое.
+    func saveShowHidden() {
+        Settings.defaults.set(showHidden, forKey: "showHidden")
+    }
+
+    func saveLastPath() {
+        Settings.defaults.set(lastPath, forKey: "lastPath")
     }
 }
 

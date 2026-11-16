@@ -342,6 +342,7 @@ extension Language {
 
         // Windows
         .separateDockIcons: "Separate Dock Icon for Each Window",
+        .windowsFont: "Windows-Style Font",
         .cannotOpenWindow: "Cannot open a new window",
 
         // Windows 10: places

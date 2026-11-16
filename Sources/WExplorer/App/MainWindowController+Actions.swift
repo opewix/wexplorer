@@ -104,6 +104,7 @@ extension MainWindowController: NSMenuItemValidation {
         }
         pasteboard.writeObjects(items)
         CutFiles.refresh()
+        if Theme.isWin10 { ribbon.refresh() }
         status.leftText = cut
             ? tr(.cutStatus, urls.count)
             : tr(.copiedStatus, urls.count)
@@ -126,9 +127,12 @@ extension MainWindowController: NSMenuItemValidation {
         guard let urls = pasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty
         else { return }
+        let copied = pasteboard.changeCount
         ops.transfer(urls, to: dest, kind: move ? .move : .copy) { [weak self] created in
             guard let self else { return }
-            if move {
+            // Буфер чистим, только если что-то перенесено и в нём всё ещё вырезанное: отказ в окне
+            // замены не должен стирать вырезанное, а долгий перенос — то, что успели скопировать после.
+            if move, !created.isEmpty, pasteboard.changeCount == copied {
                 pasteboard.clearContents()
                 CutFiles.refresh()
             }
@@ -245,7 +249,7 @@ extension MainWindowController: NSMenuItemValidation {
 
     @objc func toggleHidden(_ sender: Any?) {
         settings.showHidden.toggle()
-        settings.save()
+        settings.saveShowHidden()
         sidebar.folderTree.showHidden = settings.showHidden
         reload(preserveSelection: true)
         updateChrome()

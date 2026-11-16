@@ -67,9 +67,42 @@ enum Win10 {
     static let rowHeight: CGFloat = 22
     static let sidebarWidth: CGFloat = 200
 
-    /// Segoe UI 9 pt в Windows — это 12 точек на Mac. Сам Segoe не поставляем, берём системный.
-    static let font = NSFont.systemFont(ofSize: 12)
-    static let smallFont = NSFont.systemFont(ofSize: 11)
+    /// Segoe UI 9 pt в Windows — это 12 точек на Mac. Сам Segoe не поставляем — см. `Fonts`.
+    static var font: NSFont { Fonts.ui(12) }
+    static var smallFont: NSFont { Fonts.ui(11) }
+}
+
+/// Шрифт окна. Шрифтов Microsoft в программе нет: берём те, что уже стоят в системе. Tahoma — шрифт
+/// интерфейса Windows XP — входит в macOS; Segoe UI (Windows 10) используется, только если
+/// пользователь установил его сам. «Вид → Шрифт как в Windows» возвращает системный шрифт macOS.
+enum Fonts {
+    private static let key = "windowsFont"
+
+    /// Включён по умолчанию: пока пользователь не выключил, ключа в настройках нет.
+    static var windows: Bool = UserDefaults.standard.object(forKey: key) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(windows, forKey: key)
+            cache = [:]
+        }
+    }
+
+    private static let available: Set<String> = Set(["Segoe UI", "Tahoma"].filter {
+        NSFontManager.shared.font(withFamily: $0, traits: [], weight: 5, size: 12) != nil
+    })
+    private static var cache: [String: NSFont] = [:]
+
+    static func ui(_ size: CGFloat, bold: Bool = false) -> NSFont {
+        let wanted = !windows ? [] : Theme.isWin10 ? ["Segoe UI", "Tahoma"] : ["Tahoma"]
+        let family = wanted.first { available.contains($0) }
+        let key = "\(family ?? "")|\(size)|\(bold)"
+        if let font = cache[key] { return font }
+        let system = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
+        let font = family.flatMap {
+            NSFontManager.shared.font(withFamily: $0, traits: bold ? .boldFontMask : [], weight: bold ? 9 : 5, size: size)
+        } ?? system
+        cache[key] = font
+        return font
+    }
 }
 
 extension NSBezierPath {

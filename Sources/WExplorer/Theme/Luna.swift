@@ -49,9 +49,9 @@ enum Luna {
     static let statusBarHeight: CGFloat = 22
     static let sidebarWidth: CGFloat = 260
 
-    // Шрифт: пока системный; Tahoma-подобный свободный шрифт подключим позже.
-    static let font = NSFont.systemFont(ofSize: 11)
-    static let fontBold = NSFont.boldSystemFont(ofSize: 11)
+    // Tahoma 8 pt в Windows XP — это 11 точек на Mac; см. `Fonts`.
+    static var font: NSFont { Fonts.ui(11) }
+    static var fontBold: NSFont { Fonts.ui(11, bold: true) }
 }
 
 extension NSColor {

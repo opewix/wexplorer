@@ -19,13 +19,9 @@ enum DropRules {
     static func operation(_ info: NSDraggingInfo, into folder: URL) -> NSDragOperation {
         let urls = urls(info)
         guard !urls.isEmpty else { return [] }
-        let folderPath = folder.standardizedFileURL.path
-        if urls.contains(where: {
-            let p = $0.standardizedFileURL.path
-            return p == folderPath || folderPath.hasPrefix(p + "/")
-        }) { return [] }
+        if urls.contains(where: { FileIdentity.isInside(folder, $0) }) { return [] }
         let mask = info.draggingSourceOperationMask
-        let alreadyThere = urls.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL.path == folderPath }
+        let alreadyThere = urls.allSatisfy { FileIdentity.sameFolder($0.deletingLastPathComponent(), folder) }
         // Правой кнопкой можно бросить и в ту же папку: там пригодятся «Копировать» и «Создать ярлыки».
         if isRightDrag(info) { return alreadyThere || !Places.sameVolume(urls[0], folder) ? .copy : .move }
         if !mask.contains(.move) { return mask.contains(.copy) ? .copy : [] }

@@ -8,7 +8,6 @@ final class AddToArchiveDialog: NSObject {
         let trashSources: Bool
     }
 
-    private static var current: AddToArchiveDialog?
     private static let formatKey = "archiveDialogFormat"
     private static let levelKey = "archiveDialogLevel"
 
@@ -44,8 +43,8 @@ final class AddToArchiveDialog: NSObject {
 
     static func present(sources: [URL], over parent: NSWindow, onConfirm: @escaping (Request) -> Void) {
         let dialog = AddToArchiveDialog(sources: sources, onConfirm: onConfirm)
-        current = dialog
-        parent.beginSheet(dialog.panel) { _ in current = nil }
+        // Окно диалога держит само замыкание — у каждого окна программы свой диалог.
+        parent.beginSheet(dialog.panel) { _ in _ = dialog }
     }
 
     init(sources: [URL], onConfirm: @escaping (Request) -> Void) {

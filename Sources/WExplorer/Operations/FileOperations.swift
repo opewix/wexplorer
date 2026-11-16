@@ -38,9 +38,10 @@ final class FileOperations {
                 DispatchQueue.main.async {
                     progress.update(index: index, total: steps.count, source: step.source, destination: folder)
                 }
+                var replaced: NSURL?
                 do {
                     if step.replace {
-                        try fm.trashItem(at: step.destination, resultingItemURL: nil)
+                        try fm.trashItem(at: step.destination, resultingItemURL: &replaced)
                     }
                     switch kind {
                     case .copy: try fm.copyItem(at: step.source, to: step.destination)
@@ -49,6 +50,11 @@ final class FileOperations {
                     done.append(step)
                 } catch {
                     errors.append("«\(step.source.lastPathComponent)»: \(error.localizedDescription)")
+                    // Не получилось — прежний объект возвращаем из корзины на место, убрав недописанную копию.
+                    if let replaced = replaced as URL? {
+                        try? fm.removeItem(at: step.destination)
+                        try? fm.moveItem(at: replaced, to: step.destination)
+                    }
                 }
             }
             DispatchQueue.main.async {
@@ -68,22 +74,36 @@ final class FileOperations {
         let dest = folder.standardizedFileURL
         var steps: [Step] = []
         var replaceAll = false
+        // Имена, уже занятые этой же операцией: два одноимённых объекта из разных папок.
+        var claimed = Set<String>()
         for raw in sources {
             let src = raw.standardizedFileURL
-            if dest.path == src.path || dest.path.hasPrefix(src.path + "/") {
-                let name = src.lastPathComponent
-                Alerts.error(kind == .copy ? tr(.cannotCopyItem, name) : tr(.cannotMoveItem, name),
-                             info: tr(.destinationInsideSource))
+            let name = src.lastPathComponent
+            let cannot = kind == .copy ? tr(.cannotCopyItem, name) : tr(.cannotMoveItem, name)
+            if FileIdentity.isInside(dest, src) {
+                Alerts.error(cannot, info: tr(.destinationInsideSource))
                 return nil
             }
-            if src.deletingLastPathComponent().path == dest.path {
+            if FileIdentity.sameFolder(src.deletingLastPathComponent(), dest) {
                 if kind == .move { continue }
                 steps.append(Step(source: src, destination: uniqueCopyURL(for: src), replace: false))
                 continue
             }
-            let target = dest.appendingPathComponent(src.lastPathComponent)
+            let target = dest.appendingPathComponent(name)
+            guard claimed.insert(target.path.lowercased()).inserted else {
+                // Иначе второй объект отправил бы в корзину только что перенесённый первый.
+                Alerts.error(cannot, info: tr(.nameExists, name))
+                continue
+            }
             var replace = false
             if fm.fileExists(atPath: target.path) {
+                // Замена отправляет прежний объект в корзину — это не должен быть сам источник
+                // и не папка, в которой он лежит.
+                if FileIdentity.same(target, src) { continue }
+                if FileIdentity.isInside(src, target) {
+                    Alerts.error(cannot, info: tr(.nameExists, name))
+                    continue
+                }
                 if !replaceAll {
                     switch Alerts.confirmReplace(src.lastPathComponent) {
                     case .yes: break
@@ -131,13 +151,19 @@ final class FileOperations {
     @discardableResult
     func move(_ pairs: [(URL, URL)], actionName: String) -> [URL] {
         var done: [(URL, URL)] = []
+        var errors: [String] = []
         for (from, to) in pairs {
             do {
                 try moveItem(from, to)
                 done.append((from, to))
             } catch {
-                Alerts.error(tr(.cannotMove, from.lastPathComponent), info: error.localizedDescription)
+                errors.append("«\(from.lastPathComponent)»: \(error.localizedDescription)")
             }
+        }
+        // Одно окно на все ошибки, а не по окну на объект.
+        if let first = pairs.first, !errors.isEmpty {
+            Alerts.error(tr(.cannotMove, pairs.count == 1 ? first.0.lastPathComponent : "…"),
+                         info: errors.prefix(10).joined(separator: "\n"))
         }
         register(moves: done, actionName: actionName)
         return done.map(\.1)
@@ -153,9 +179,19 @@ final class FileOperations {
     /// Учитывает переименование с изменением только регистра на нечувствительной к регистру ФС.
     private func moveItem(_ from: URL, _ to: URL) throws {
         if from.path != to.path && from.path.lowercased() == to.path.lowercased() {
+            // На чувствительном к регистру диске «a.txt» и «A.txt» — разные файлы: чужой не затираем.
+            if fm.fileExists(atPath: to.path) && !FileIdentity.same(from, to) {
+                throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: to.path])
+            }
             let temp = from.deletingLastPathComponent().appendingPathComponent(".wexplorer-\(UUID().uuidString)")
             try fm.moveItem(at: from, to: temp)
-            try fm.moveItem(at: temp, to: to)
+            do {
+                try fm.moveItem(at: temp, to: to)
+            } catch {
+                // Иначе файл остался бы скрытым под временным именем.
+                try? fm.moveItem(at: temp, to: from)
+                throw error
+            }
         } else {
             try fm.moveItem(at: from, to: to)
         }
@@ -168,14 +204,20 @@ final class FileOperations {
         guard !urls.isEmpty else { return false }
         if confirm && !Alerts.confirmTrash(urls) { return false }
         var pairs: [(URL, URL)] = []
+        var errors: [String] = []
         for url in urls {
             do {
                 var result: NSURL?
                 try fm.trashItem(at: url, resultingItemURL: &result)
                 if let result { pairs.append((url, result as URL)) }
             } catch {
-                Alerts.error(tr(.cannotDelete, url.lastPathComponent), info: error.localizedDescription)
+                errors.append("«\(url.lastPathComponent)»: \(error.localizedDescription)")
             }
+        }
+        // Одно окно на все ошибки: на диске без корзины иначе было бы по окну на каждый объект.
+        if !errors.isEmpty {
+            Alerts.error(tr(.cannotDelete, urls.count == 1 ? urls[0].lastPathComponent : "…"),
+                         info: errors.prefix(10).joined(separator: "\n"))
         }
         guard !pairs.isEmpty else { return false }
         let restore = pairs.map { ($0.1, $0.0) }
@@ -265,7 +307,7 @@ final class FileOperations {
             return nil
         }
         let target = url.deletingLastPathComponent().appendingPathComponent(name)
-        if fm.fileExists(atPath: target.path) && target.path.lowercased() != url.path.lowercased() {
+        if fm.fileExists(atPath: target.path) && !FileIdentity.same(target, url) {
             Alerts.error(tr(.cannotRename, url.lastPathComponent), info: tr(.nameExists, name))
             return nil
         }
@@ -312,5 +354,32 @@ final class FileOperations {
         }
         undoManager?.setActionName(tr(.actionNewDocument))
         return url
+    }
+}
+
+/// Один ли это объект на диске и лежит ли один внутри другого. Сравнение путей строками тут не годится:
+/// до одной папки ведут разные написания — ссылка, другой регистр букв в набранном адресе.
+enum FileIdentity {
+    static func same(_ a: URL, _ b: URL) -> Bool {
+        if a.standardizedFileURL.path == b.standardizedFileURL.path { return true }
+        guard let first = try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier,
+              let second = try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier else { return false }
+        return first.isEqual(second)
+    }
+
+    /// Одна ли это папка; в отличие от `same`, ссылка на папку считается самой папкой.
+    static func sameFolder(_ a: URL, _ b: URL) -> Bool {
+        same(a.resolvingSymlinksInPath(), b.resolvingSymlinksInPath())
+    }
+
+    /// `inner` — это сам `outer` или лежит где-то в нём.
+    static func isInside(_ inner: URL, _ outer: URL) -> Bool {
+        var current = inner.resolvingSymlinksInPath().standardizedFileURL
+        while true {
+            if same(current, outer) { return true }
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path { return false }
+            current = parent
+        }
     }
 }

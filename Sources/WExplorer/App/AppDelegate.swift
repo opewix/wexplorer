@@ -7,10 +7,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = Menus.main()
         CutFiles.startWatching()
         FileExtensions.observeOtherInstances()
+        if let directory = Self.snapshotDirectory {
+            snapshot(into: directory)
+            return
+        }
         // Экземпляр, запущенный другим экземпляром, открывается там, куда его послали.
         openWindow(at: Instances.startLocation ?? Self.startLocation(), frame: Instances.startFrame)
-        Instances.observeTheme { [weak self] theme in self?.apply(theme) }
+        Instances.observeTheme { [weak self] theme, windowsFont in self?.apply(theme, windowsFont: windowsFont) }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: Снимок окна
+
+    /// `WExplorer -snapshot <папка> [-theme xp|win10] [-snapshotPath <папка для показа>]`: рисует окно
+    /// в PNG и выходит — для README и проверки вида без разрешения на запись экрана.
+    private static var snapshotDirectory: String? { argument(after: "-snapshot") }
+
+    private static func argument(after flag: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: flag), index + 1 < args.count else { return nil }
+        return args[index + 1]
+    }
+
+    private func snapshot(into directory: String) {
+        let folder = URL(fileURLWithPath: Self.argument(after: "-snapshotPath") ?? "/System/Applications")
+        let controller = openWindow(at: .folder(folder), frame: NSRect(x: 100, y: 100, width: 900, height: 600))
+        // Список папки читается в фоне — ждём его.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            // Через рамку окна (`themeFrame`), а не `contentView`: иначе строки таблицы в снимок не попадают.
+            if let view = controller.window?.contentView?.superview, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.layoutSubtreeIfNeeded()
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let name = "window-\(Theme.current.rawValue).png"
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: directory).appendingPathComponent(name))
+            }
+            exit(0)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -21,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// в пространство с её открытыми окнами».
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if controllers.contains(where: { $0.window.map { $0.isVisible && $0.isOnActiveSpace } ?? false }) { return true }
+        // Свёрнутое окно возвращаем, а не открываем рядом ещё одно.
+        if let minimized = controllers.first(where: { $0.window?.isMiniaturized == true })?.window {
+            minimized.deminiaturize(nil)
+            return false
+        }
         // Событие получает один экземпляр, а окно этого стола может быть у другого.
         if let other = Instances.otherWithWindowHere() {
             other.activate(options: [.activateIgnoringOtherApps])
@@ -125,10 +162,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Instances.broadcast(theme)
     }
 
+    /// «Вид → Шрифт как в Windows». Шрифт меняется и в остальных экземплярах программы.
+    @objc func toggleWindowsFont(_ sender: Any?) {
+        apply(Theme.current, windowsFont: !Fonts.windows)
+        Instances.broadcast(Theme.current)
+    }
+
     /// Каждое окно пересобирается на месте: та же папка, история и рамка.
-    private func apply(_ theme: Theme) {
-        guard theme != Theme.current else { return }
-        Theme.choose(theme)
+    private func apply(_ theme: Theme, windowsFont: Bool = Fonts.windows) {
+        guard theme != Theme.current || windowsFont != Fonts.windows else { return }
+        if theme != Theme.current { Theme.choose(theme) }
+        if windowsFont != Fonts.windows { Fonts.windows = windowsFont }
         NSApp.mainMenu = Menus.main()
         let key = NSApp.keyWindow
         var newKey: MainWindowController?
@@ -149,6 +193,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func newWindow(_ sender: Any?) {
         let key = NSApp.keyWindow?.windowController as? MainWindowController
-        openNewWindow(at: .folder(key?.location.url ?? Places.home), near: key?.window?.frame)
+        // Из «Компьютера» — снова «Компьютер», из результатов поиска — папка, где искали.
+        var place = key?.location ?? .folder(Places.home)
+        if case .search(_, let scope) = place { place = .folder(scope) }
+        openNewWindow(at: place, near: key?.window?.frame)
     }
 }

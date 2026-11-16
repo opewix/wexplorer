@@ -17,6 +17,8 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
   - **Windows 10** — File / Home / Share / View ribbon (collapsed by default, like the original),
     breadcrumb address bar with subfolder menus and search-as-you-type, Quick access and This PC
     navigation pane, flat light-blue selection, status bar with view switches.
+- **Windows-style font** (View → Windows-Style Font, on by default): Tahoma, which ships with macOS;
+  the Windows 10 theme uses Segoe UI instead if you have installed it yourself.
 - **Folder tree** with drag & drop, a context menu and a resizable divider.
 - **Views:** Thumbnails, Tiles, Icons, List and Details, with QuickLook thumbnails. Each folder
   remembers its own view and sort order; the width of the left pane is remembered too.

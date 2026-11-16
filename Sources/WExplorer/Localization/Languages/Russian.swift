@@ -342,6 +342,7 @@ extension Language {
 
         // Окна
         .separateDockIcons: "Отдельная иконка в Dock для каждого окна",
+        .windowsFont: "Шрифт как в Windows",
         .cannotOpenWindow: "Не удалось открыть новое окно",
 
         // Windows 10: места

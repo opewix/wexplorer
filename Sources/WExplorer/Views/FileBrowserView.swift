@@ -10,7 +10,7 @@ protocol FileBrowserDelegate: AnyObject {
     func browserHandleKey(_ event: NSEvent) -> Bool
     func browserContextMenu(onItem: Bool) -> NSMenu?
     /// name == nil — переименование отменено.
-    func browserRename(_ index: Int, to name: String?)
+    func browserRename(_ url: URL?, to name: String?)
     func browserSortDidChange(_ key: SortKey, ascending: Bool)
     func browserDrop(_ urls: [URL], into folder: URL, copy: Bool) -> Bool
     /// Бросили то, что тянули правой кнопкой: спросить меню, что сделать.
@@ -262,7 +262,10 @@ final class FileBrowserView: LunaView {
             return
         }
         table.scrollRowToVisible(index)
-        guard let cell = table.view(atColumn: 0, row: index, makeIfNecessary: true) as? NameCellView,
+        // Колонку «Имя» могли перетащить с первого места.
+        let nameColumn = table.column(withIdentifier: NSUserInterfaceItemIdentifier(SortKey.name.columnID))
+        guard nameColumn >= 0,
+              let cell = table.view(atColumn: nameColumn, row: index, makeIfNecessary: true) as? NameCellView,
               let field = cell.textField else { return }
         renamingIndex = index
         renameCancelled = false
@@ -290,7 +293,7 @@ final class FileBrowserView: LunaView {
         alert.addButton(withTitle: tr(.cancel))
         alert.window.initialFirstResponder = field
         let ok = alert.runModal() == .alertFirstButtonReturn
-        delegate?.browserRename(index, to: ok ? item.fullName(fromEdited: field.stringValue) : nil)
+        delegate?.browserRename(item.url, to: ok ? item.fullName(fromEdited: field.stringValue) : nil)
     }
 
     // MARK: Для FileTableView / FileCollectionView
@@ -569,7 +572,10 @@ extension FileBrowserView: NSTextFieldDelegate {
         renamingIndex = nil
         (field.superview as? NameCellView)?.endEditing()
         var newName = field.stringValue
+        // Объект запоминаем сейчас: пока дойдёт до переименования, список может перечитаться и сдвинуться.
+        var url: URL?
         if index < items.count {
+            url = items[index].url
             newName = items[index].fullName(fromEdited: newName)
             field.stringValue = items[index].displayName
         }
@@ -580,7 +586,7 @@ extension FileBrowserView: NSTextFieldDelegate {
             if cancelled || movement == NSTextMovement.return.rawValue {
                 self.window?.makeFirstResponder(self.table)
             }
-            self.delegate?.browserRename(index, to: cancelled ? nil : newName)
+            self.delegate?.browserRename(url, to: cancelled ? nil : newName)
         }
     }
 }

@@ -245,6 +245,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
     }
 
+    /// Буфер обмена могли сменить в другой программе — «Вставить» на ленте сверяется с ним заново.
+    func windowDidBecomeKey(_ notification: Notification) {
+        if Theme.isWin10 { ribbon.refresh() }
+    }
+
     func windowWillClose(_ notification: Notification) {
         search.stop()
         watcher.watch(nil)
@@ -261,7 +266,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         pendingRename = nil
         if let url = newLocation.url {
             settings.lastPath = url.path
-            settings.save()
+            settings.saveLastPath()
         }
         // Результаты поиска показываются тем видом, что был в папке, откуда искали.
         if case .search = newLocation {} else { showFolderView(FolderViews.view(for: newLocation)) }
@@ -432,10 +437,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             focusList()
             return
         }
-        let path = (text as NSString).expandingTildeInPath
+        var path = (text as NSString).expandingTildeInPath
+        // Имя без пути — папка или файл в текущей папке, как в Windows.
+        if !path.hasPrefix("/"), !path.contains("://"), let here = location.url {
+            path = here.appendingPathComponent(path).path
+        }
         var isDir: ObjCBool = false
         if path.hasPrefix("/"), FileManager.default.fileExists(atPath: path, isDirectory: &isDir) {
-            let url = URL(fileURLWithPath: path)
+            // Набранное приводим к настоящему пути (регистр букв, «..»): по нему сверяются дерево папок,
+            // запомненный вид папки и кнопка «Вверх».
+            let typed = URL(fileURLWithPath: path)
+            let canonical = (try? typed.resourceValues(forKeys: [.canonicalPathKey]))?.canonicalPath
+            let url = canonical.map { URL(fileURLWithPath: $0) } ?? typed.standardizedFileURL
             if isDir.boolValue && !Places.isPackage(url) {
                 navigate(to: .folder(url))
             } else {
@@ -690,11 +703,10 @@ extension MainWindowController: FileBrowserDelegate {
         return location.url == nil ? nil : Menus.backgroundContext()
     }
 
-    func browserRename(_ index: Int, to name: String?) {
+    func browserRename(_ url: URL?, to name: String?) {
         defer { finishRename() }
-        guard let name, index < browser.items.count else { return }
-        let item = browser.items[index]
-        if let renamed = ops.rename(item.url, to: name) {
+        guard let name, let url else { return }
+        if let renamed = ops.rename(url, to: name) {
             pendingSelection = [renamed]
             reloadAfterRename = false
             reload(preserveSelection: true)
