@@ -24,6 +24,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private let watcher = DirectoryWatcher()
     private let search = FileSearch()
     private var loadGeneration = 0
+    private var volumeObservers: [NSObjectProtocol] = []
+    private var searchSequence = 0
+    /// Переименованное в результатах поиска: старый путь → новый адрес, пока Spotlight не догонит.
+    private var searchRenames: [String: URL] = [:]
     private var scrollToTopOnApply = false
     private var reloadAfterRename = false
     var pendingSelection: [URL]?
@@ -164,6 +168,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             }
         }
         search.onResults = { [weak self] urls, finished in self?.showSearchResults(urls, finished: finished) }
+
+        // Диск подключили или извлекли: «Компьютер» и дерево показывают это сразу, без «Обновить».
+        let workspace = NSWorkspace.shared.notificationCenter
+        volumeObservers = [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification, NSWorkspace.didRenameVolumeNotification].map { name in
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let unmounted = name == NSWorkspace.didUnmountNotification
+                self?.volumesChanged(unmounted: unmounted ? note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL : nil)
+            }
+        }
+    }
+
+    private func volumesChanged(unmounted: URL?) {
+        sidebar.folderTree.refreshVolumes()
+        if let url = location.url, let volume = unmounted,
+           url.path == volume.path || url.path.hasPrefix(volume.path + "/") || !FileManager.default.fileExists(atPath: url.path) {
+            // Открытая папка была на извлечённом диске.
+            navigate(to: .computer, recordHistory: false)
+        } else if location == .computer {
+            reload(preserveSelection: true)
+        }
     }
 
     private func connectWin10() {
@@ -251,6 +275,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func windowWillClose(_ notification: Notification) {
+        volumeObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+        volumeObservers = []
         search.stop()
         watcher.watch(nil)
         (NSApp.delegate as? AppDelegate)?.windowDidClose(self)
@@ -262,6 +288,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         if recordHistory, newLocation != location { history.push(location) }
         if case .search = newLocation {} else { search.stop() }
         location = newLocation
+        searchRenames = [:]
         pendingSelection = select
         pendingRename = nil
         if let url = newLocation.url {
@@ -307,6 +334,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 status.leftText = tr(.searching)
                 status.middleText = ""
                 search.start(query, in: scope)
+            } else {
+                // «Обновить», смена скрытых файлов, переименование: показываем то, что нашлось, заново.
+                search.republish()
             }
         }
     }
@@ -346,10 +376,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private func showSearchResults(_ urls: [URL], finished: Bool) {
         guard case .search = location else { return }
         let generation = loadGeneration
+        // Порции собираются в фоне и могли бы прийти не по порядку — показываем только последнюю.
+        searchSequence += 1
+        let sequence = searchSequence
+        let renames = searchRenames
         DispatchQueue.global(qos: .userInitiated).async {
-            let items = urls.map(FileItem.init(url:))
+            // Spotlight узнаёт о переименовании не сразу: до тех пор объект — под новым адресом,
+            // а того, чего на диске уже нет, в списке нет.
+            let fm = FileManager()
+            var seen = Set<String>()
+            let items = urls.map { renames[$0.path] ?? $0 }
+                .filter { seen.insert($0.path).inserted && fm.fileExists(atPath: $0.path) }
+                .map(FileItem.init(url:))
             DispatchQueue.main.async { [weak self] in
-                guard let self, generation == self.loadGeneration else { return }
+                guard let self, generation == self.loadGeneration, sequence == self.searchSequence else { return }
                 if self.pendingSelection == nil { self.pendingSelection = self.browser.selectedItems.map(\.url) }
                 self.apply(items)
             }
@@ -460,6 +500,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             NSWorkspace.shared.open(url)
         } else {
             Alerts.error(tr(.cannotFind, text), info: tr(.checkSpelling))
+            // Набранное остаётся в строке — поправить опечатку, как в теме XP.
+            if Theme.isWin10 { navBar.address.edit(text) }
         }
     }
 
@@ -595,7 +637,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         case 1: scope = Places.home
         default: scope = URL(fileURLWithPath: "/")
         }
-        navigate(to: .search(query: text, scope: scope))
+        // Поиск по мере набора уточняет тот же поиск: «Назад» ведёт в папку, а не по недонабранным словам.
+        var refining = false
+        if case .search(_, let current) = location { refining = current == scope }
+        navigate(to: .search(query: text, scope: scope), recordHistory: !refining)
     }
 
     // MARK: Окна
@@ -707,6 +752,7 @@ extension MainWindowController: FileBrowserDelegate {
         defer { finishRename() }
         guard let name, let url else { return }
         if let renamed = ops.rename(url, to: name) {
+            if case .search = location { searchRenames[url.path] = renamed }
             pendingSelection = [renamed]
             reloadAfterRename = false
             reload(preserveSelection: true)

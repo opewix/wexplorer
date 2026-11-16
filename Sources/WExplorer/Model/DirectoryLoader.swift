@@ -98,6 +98,11 @@ final class FileSearch {
         query = nil
     }
 
+    /// Отдать результаты ещё раз — «Обновить» в результатах поиска.
+    func republish() {
+        publish(finished: true)
+    }
+
     private func publish(finished: Bool) {
         guard let q = query else { return }
         q.disableUpdates()

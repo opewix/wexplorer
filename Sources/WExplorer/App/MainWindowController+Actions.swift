@@ -61,8 +61,8 @@ extension MainWindowController: NSMenuItemValidation {
     @objc func moveToTrash(_ sender: Any?) {
         let urls = selectedURLs
         guard !urls.isEmpty else { return }
-        if ops.trash(urls, confirm: true) {
-            reload(preserveSelection: false)
+        ops.trashInBackground(urls, confirm: true) { [weak self] deleted in
+            if deleted { self?.reload(preserveSelection: false) }
         }
     }
 

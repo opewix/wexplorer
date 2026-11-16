@@ -290,6 +290,14 @@ final class BreadcrumbBar: LunaView, NSTextFieldDelegate {
         typedLength = (field.stringValue as NSString).length
     }
 
+    /// Открыть строку для правки с этим текстом — когда набранный адрес не нашёлся.
+    func edit(_ text: String) {
+        beginEditing()
+        field.stringValue = text
+        field.currentEditor()?.selectAll(nil)
+        typedLength = (text as NSString).length
+    }
+
     private func endEditing() {
         guard isEditing else { return }
         isEditing = false
@@ -430,7 +438,8 @@ final class SearchBox: LunaView, NSTextFieldDelegate {
 
     func show(_ location: Location) {
         if case .search(let query, let scope) = location {
-            if field.stringValue != query { field.stringValue = query }
+            // Пробел в конце набираемого запроса не срезаем: поиск идёт по мере набора.
+            if field.stringValue.trimmingCharacters(in: .whitespaces) != query { field.stringValue = query }
             field.placeholderString = tr(.searchPlaceholder, Places.displayName(of: scope))
         } else {
             timer?.invalidate()

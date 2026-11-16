@@ -105,6 +105,24 @@ final class TreeNode {
         return true
     }
 
+    /// Сверяет диски «Компьютера» с подключёнными. Уцелевшие узлы остаются теми же объектами.
+    /// true — список изменился.
+    func refreshVolumes() -> Bool {
+        guard kind == .computer, let loaded else { return false }
+        var old: [String: TreeNode] = [:]
+        for node in loaded where node.kind == .volume { if let p = node.path { old[p] = node } }
+        let volumes = DirectoryLoader.volumes().map { url -> TreeNode in
+            // Переименованный диск — новый узел: у прежнего старое название.
+            if let node = old[url.standardizedFileURL.path], node.title == Places.displayName(of: url) { return node }
+            return TreeNode(kind: .volume, url: url, title: Places.displayName(of: url))
+        }
+        let result = loaded.filter { $0.kind != .volume } + volumes
+        guard result.map(ObjectIdentifier.init) != loaded.map(ObjectIdentifier.init) else { return false }
+        result.forEach { $0.parent = self }
+        self.loaded = result
+        return true
+    }
+
     private func folderNodes(_ showHidden: Bool) -> [TreeNode] {
         guard let url else { return [] }
         return DirectoryLoader.subfolders(of: url, showHidden: showHidden).map {
@@ -207,6 +225,28 @@ final class FolderTreeView: LunaView, NSOutlineViewDataSource, NSOutlineViewDele
         while let node = stack.popLast() {
             guard visited.insert(ObjectIdentifier(node)).inserted else { continue }
             if node.path == target, node.refreshFolders(showHidden: showHidden) { changed.append(node) }
+            stack += node.loadedChildren ?? []
+        }
+        guard !changed.isEmpty else { return }
+        programmatic = true
+        defer { programmatic = false }
+        let selected = outline.selectedRow >= 0 ? outline.item(atRow: outline.selectedRow) as AnyObject? : nil
+        hover.reset()
+        changed.forEach { outline.reloadItem($0, reloadChildren: true) }
+        if let selected {
+            let row = outline.row(forItem: selected)
+            if row >= 0 { outline.selectRowIndexes([row], byExtendingSelection: false) } else { outline.deselectAll(nil) }
+        }
+    }
+
+    /// Диск подключили, извлекли или переименовали — обновить узлы «Компьютера».
+    func refreshVolumes() {
+        var changed: [TreeNode] = []
+        var stack = [root]
+        var visited = Set<ObjectIdentifier>()
+        while let node = stack.popLast() {
+            guard visited.insert(ObjectIdentifier(node)).inserted else { continue }
+            if node.refreshVolumes() { changed.append(node) }
             stack += node.loadedChildren ?? []
         }
         guard !changed.isEmpty else { return }

@@ -36,7 +36,11 @@ final class FileBrowserView: LunaView {
     private let collectionScroll = NSScrollView()
     private let flow = LeftAlignedFlowLayout()
     private let thumbnails = NSCache<NSURL, NSImage>()
-    private var requestedThumbnails = Set<URL>()
+    /// Эскиз привязан к дате изменения файла: изменённый рисунок получает новый эскиз.
+    private var thumbnailDates: [URL: Date] = [:]
+    private var thumbnailsInFlight = Set<URL>()
+    /// Файлы, для которых эскиз не получился, — с датой, при которой не получился.
+    private var thumbnailsFailed: [URL: Date] = [:]
     private var carriedSelection: [URL] = []
     private var renamingIndex: Int?
     private var renameCancelled = false
@@ -396,21 +400,31 @@ final class FileBrowserView: LunaView {
 
     private func image(for item: FileItem) -> NSImage {
         guard mode == .thumbnails, !item.isDirectory else { return item.icon }
-        if let cached = thumbnails.object(forKey: item.url as NSURL) { return cached }
-        requestThumbnail(item.url)
-        return item.icon
+        let date = item.modified ?? .distantPast
+        let cached = thumbnails.object(forKey: item.url as NSURL)
+        if let cached, thumbnailDates[item.url] == date { return cached }
+        requestThumbnail(item.url, date: date)
+        // Пока готовится новый эскиз изменённого файла — показываем прежний.
+        return cached ?? item.icon
     }
 
-    private func requestThumbnail(_ url: URL) {
-        guard !requestedThumbnails.contains(url) else { return }
-        requestedThumbnails.insert(url)
+    private func requestThumbnail(_ url: URL, date: Date) {
+        guard !thumbnailsInFlight.contains(url), thumbnailsFailed[url] != date else { return }
+        thumbnailsInFlight.insert(url)
         let request = QLThumbnailGenerator.Request(
             fileAt: url, size: CGSize(width: 96, height: 96),
             scale: window?.backingScaleFactor ?? 2, representationTypes: .thumbnail)
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, _ in
-            guard let image = representation?.nsImage else { return }
+            let image = representation?.nsImage
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.thumbnailsInFlight.remove(url)
+                guard let image else {
+                    self.thumbnailsFailed[url] = date
+                    return
+                }
+                self.thumbnailsFailed[url] = nil
+                self.thumbnailDates[url] = date
                 self.thumbnails.setObject(image, forKey: url as NSURL)
                 if let index = self.items.firstIndex(where: { $0.url == url }),
                    let cell = self.collection.item(at: IndexPath(item: index, section: 0)) as? IconItem {

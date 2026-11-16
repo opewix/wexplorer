@@ -10,6 +10,23 @@ final class FileOperations {
         let replace: Bool
     }
 
+    /// Выполненный шаг: `replaced` — куда в корзине лёг объект, который заменили.
+    private struct Done {
+        let source: URL
+        let destination: URL
+        var replaced: URL?
+    }
+
+    /// Прерывает копирование и удаление папки посреди неё: FileManager спрашивает про каждый вложенный
+    /// объект. Для перемещения не годится — между дисками оно копирует и затем удаляет источник,
+    /// и пропущенные при копировании объекты пропали бы.
+    private final class CancelGuard: NSObject, FileManagerDelegate {
+        private let isCancelled: () -> Bool
+        init(_ isCancelled: @escaping () -> Bool) { self.isCancelled = isCancelled }
+        func fileManager(_ fileManager: FileManager, shouldCopyItemAt srcURL: URL, to dstURL: URL) -> Bool { !isCancelled() }
+        func fileManager(_ fileManager: FileManager, shouldRemoveItemAt URL: URL) -> Bool { !isCancelled() }
+    }
+
     private weak var window: NSWindow?
     private var undoManager: UndoManager? { window?.undoManager }
     private let fm = FileManager.default
@@ -31,7 +48,8 @@ final class FileOperations {
         progress.showAfterDelay()
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager()
-            var done: [Step] = []
+            let guardian = CancelGuard { progress.isCancelled }
+            var done: [Done] = []
             var errors: [String] = []
             for (index, step) in steps.enumerated() {
                 if progress.isCancelled { break }
@@ -44,10 +62,20 @@ final class FileOperations {
                         try fm.trashItem(at: step.destination, resultingItemURL: &replaced)
                     }
                     switch kind {
-                    case .copy: try fm.copyItem(at: step.source, to: step.destination)
-                    case .move: try fm.moveItem(at: step.source, to: step.destination)
+                    case .copy:
+                        fm.delegate = guardian
+                        defer { fm.delegate = nil }
+                        try fm.copyItem(at: step.source, to: step.destination)
+                    case .move:
+                        try fm.moveItem(at: step.source, to: step.destination)
                     }
-                    done.append(step)
+                    if kind == .copy && progress.isCancelled {
+                        // Отменили посреди папки: недописанную копию убираем, заменённое возвращаем.
+                        try? fm.removeItem(at: step.destination)
+                        if let replaced = replaced as URL? { try? fm.moveItem(at: replaced, to: step.destination) }
+                        break
+                    }
+                    done.append(Done(source: step.source, destination: step.destination, replaced: replaced as URL?))
                 } catch {
                     errors.append("«\(step.source.lastPathComponent)»: \(error.localizedDescription)")
                     // Не получилось — прежний объект возвращаем из корзины на место, убрав недописанную копию.
@@ -59,6 +87,7 @@ final class FileOperations {
             }
             DispatchQueue.main.async {
                 progress.close()
+                withExtendedLifetime(guardian) {}
                 self.registerUndo(for: done, kind: kind)
                 if !errors.isEmpty {
                     Alerts.error(kind == .copy ? tr(.copyFailedSome) : tr(.moveFailedSome),
@@ -131,18 +160,63 @@ final class FileOperations {
         }
     }
 
-    private func registerUndo(for steps: [Step], kind: Kind) {
-        guard !steps.isEmpty else { return }
-        switch kind {
-        case .copy:
-            let created = steps.map(\.destination)
-            undoManager?.registerUndo(withTarget: self) { ops in
-                _ = ops.trash(created, confirm: false, actionName: tr(.actionCopy))
+    private func registerUndo(for done: [Done], kind: Kind) {
+        guard !done.isEmpty else { return }
+        undoManager?.registerUndo(withTarget: self) { ops in ops.undoTransfer(done, kind: kind) }
+        undoManager?.setActionName(kind == .copy ? tr(.actionCopy) : tr(.actionMove))
+    }
+
+    /// Отмена копирования или перемещения: копия уходит в корзину (перемещённое — обратно), а то, что
+    /// было заменено, возвращается из корзины на своё место.
+    private func undoTransfer(_ done: [Done], kind: Kind) {
+        // `parked` — куда в корзине легла отменённая копия: оттуда её вернёт повтор.
+        var undone: [(step: Done, parked: URL?)] = []
+        var errors: [String] = []
+        for step in done {
+            do {
+                var parked: NSURL?
+                switch kind {
+                case .copy: try fm.trashItem(at: step.destination, resultingItemURL: &parked)
+                case .move: try moveItem(step.destination, step.source)
+                }
+                if let replaced = step.replaced { try fm.moveItem(at: replaced, to: step.destination) }
+                undone.append((step, parked as URL?))
+            } catch {
+                errors.append("«\(step.destination.lastPathComponent)»: \(error.localizedDescription)")
             }
-            undoManager?.setActionName(tr(.actionCopy))
-        case .move:
-            register(moves: steps.map { ($0.source, $0.destination) }, actionName: tr(.actionMove))
         }
+        report(errors, kind: kind)
+        guard !undone.isEmpty else { return }
+        undoManager?.registerUndo(withTarget: self) { ops in ops.redoTransfer(undone, kind: kind) }
+        undoManager?.setActionName(kind == .copy ? tr(.actionCopy) : tr(.actionMove))
+    }
+
+    private func redoTransfer(_ undone: [(step: Done, parked: URL?)], kind: Kind) {
+        var done: [Done] = []
+        var errors: [String] = []
+        for (step, parked) in undone {
+            do {
+                var replaced: NSURL?
+                if step.replaced != nil { try fm.trashItem(at: step.destination, resultingItemURL: &replaced) }
+                switch kind {
+                case .copy:
+                    guard let parked else { continue }
+                    try fm.moveItem(at: parked, to: step.destination)
+                case .move:
+                    try moveItem(step.source, step.destination)
+                }
+                done.append(Done(source: step.source, destination: step.destination, replaced: replaced as URL?))
+            } catch {
+                errors.append("«\(step.source.lastPathComponent)»: \(error.localizedDescription)")
+            }
+        }
+        report(errors, kind: kind)
+        registerUndo(for: done, kind: kind)
+    }
+
+    private func report(_ errors: [String], kind: Kind) {
+        guard !errors.isEmpty else { return }
+        Alerts.error(kind == .copy ? tr(.copyFailedSome) : tr(.moveFailedSome), info: errors.prefix(10).joined(separator: "\n"))
     }
 
     // MARK: Синхронные перемещения (переименование, отмена)
@@ -226,6 +300,44 @@ final class FileOperations {
         return true
     }
 
+    /// То же в фоне с окном прогресса и «Отменой» — для выделения пользователя: большое выделение или
+    /// диск без быстрой корзины иначе подвешивали окно. `completion(true)` — что-то удалено.
+    func trashInBackground(_ urls: [URL], confirm: Bool, completion: @escaping (Bool) -> Void) {
+        guard !urls.isEmpty, !confirm || Alerts.confirmTrash(urls) else { return }
+        let actionName = tr(.actionDelete)
+        let progress = ProgressPanel(title: tr(.deleting), parent: window)
+        progress.showAfterDelay()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fm = FileManager()
+            var pairs: [(URL, URL)] = []
+            var errors: [String] = []
+            for (index, url) in urls.enumerated() {
+                if progress.isCancelled { break }
+                DispatchQueue.main.async { progress.update(index: index, total: urls.count, source: url, destination: nil) }
+                do {
+                    var result: NSURL?
+                    try fm.trashItem(at: url, resultingItemURL: &result)
+                    if let result { pairs.append((url, result as URL)) }
+                } catch {
+                    errors.append("«\(url.lastPathComponent)»: \(error.localizedDescription)")
+                }
+            }
+            DispatchQueue.main.async {
+                progress.close()
+                if !errors.isEmpty {
+                    Alerts.error(tr(.cannotDelete, urls.count == 1 ? urls[0].lastPathComponent : "…"),
+                                 info: errors.prefix(10).joined(separator: "\n"))
+                }
+                if !pairs.isEmpty {
+                    let restore = pairs.map { ($0.1, $0.0) }
+                    self.undoManager?.registerUndo(withTarget: self) { ops in ops.move(restore, actionName: actionName) }
+                    self.undoManager?.setActionName(actionName)
+                }
+                completion(!pairs.isEmpty)
+            }
+        }
+    }
+
     /// Удаление мимо корзины (Shift+Delete). Отменить его нельзя, поэтому подтверждение — всегда.
     /// Удаляет в фоне с окном прогресса: большая папка удаляется не мгновенно.
     func deletePermanently(_ urls: [URL], completion: @escaping () -> Void) {
@@ -234,6 +346,9 @@ final class FileOperations {
         progress.showAfterDelay()
         DispatchQueue.global(qos: .userInitiated).async {
             let fm = FileManager()
+            // «Отмена» останавливает удаление и посреди большой папки: что не успело удалиться — остаётся.
+            let guardian = CancelGuard { progress.isCancelled }
+            fm.delegate = guardian
             var errors: [String] = []
             for (index, url) in urls.enumerated() {
                 if progress.isCancelled { break }
@@ -243,9 +358,11 @@ final class FileOperations {
                 do {
                     try fm.removeItem(at: url)
                 } catch {
-                    errors.append("«\(url.lastPathComponent)»: \(error.localizedDescription)")
+                    // Прерванная папка «не удаляется, потому что не пуста» — это не ошибка.
+                    if !progress.isCancelled { errors.append("«\(url.lastPathComponent)»: \(error.localizedDescription)") }
                 }
             }
+            withExtendedLifetime(guardian) {}
             DispatchQueue.main.async {
                 progress.close()
                 if !errors.isEmpty {
