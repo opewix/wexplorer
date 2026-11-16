@@ -40,6 +40,27 @@ enum Instances {
         }
     }
 
+    /// Другой экземпляр программы, у которого есть окно на текущем рабочем столе. Список окон
+    /// «на экране» WindowServer отдаёт только с текущего стола; разрешений для номера процесса не нужно.
+    static func otherWithWindowHere() -> NSRunningApplication? {
+        let own = ProcessInfo.processInfo.processIdentifier
+        let others = NSWorkspace.shared.runningApplications.filter {
+            $0.processIdentifier != own && $0.bundleURL == Bundle.main.bundleURL
+        }
+        guard !others.isEmpty else { return nil }
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        for info in list {
+            // Обычный уровень и размер окна, а не всплывашки или служебной полоски.
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = (info[kCGWindowBounds as String] as? NSDictionary).flatMap({ CGRect(dictionaryRepresentation: $0) }),
+                  bounds.width >= 150, bounds.height >= 150,
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t,
+                  let app = others.first(where: { $0.processIdentifier == pid }) else { continue }
+            return app
+        }
+        return nil
+    }
+
     // MARK: Аргументы запуска этого экземпляра
 
     private static func value(after flag: String) -> String? {

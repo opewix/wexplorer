@@ -15,8 +15,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    /// Повторный запуск (Spotlight, Dock, `open`). Окна на этом рабочем столе нет — открываем здесь
+    /// новое, как Проводник в Windows: окна на других столах не в счёт. Чтобы macOS при этом не уводила
+    /// на стол со старым окном, в её настройках выключается «При переключении на программу переходить
+    /// в пространство с её открытыми окнами».
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { openWindow(at: .folder(Places.home)) }
+        if controllers.contains(where: { $0.window.map { $0.isVisible && $0.isOnActiveSpace } ?? false }) { return true }
+        // Событие получает один экземпляр, а окно этого стола может быть у другого.
+        if let other = Instances.otherWithWindowHere() {
+            other.activate(options: [.activateIgnoringOtherApps])
+            return true
+        }
+        if flag {
+            // Свои окна — на других столах: новое открываем по общим правилам (отдельным экземпляром).
+            openNewWindow(at: .folder(Places.home), near: nil)
+        } else {
+            openWindow(at: .folder(Places.home))
+        }
         return true
     }
 
