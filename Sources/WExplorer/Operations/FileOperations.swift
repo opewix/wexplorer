@@ -491,12 +491,15 @@ enum FileIdentity {
 
     /// `inner` — это сам `outer` или лежит где-то в нём.
     static func isInside(_ inner: URL, _ outer: URL) -> Bool {
-        var current = inner.resolvingSymlinksInPath().standardizedFileURL
+        // Вверх идём по строке пути, а не через URL.deletingLastPathComponent(): у адреса, пришедшего
+        // из NSURL (чтение папки, перетаскивание), родитель корня — «/..», затем «/../..» и так без
+        // конца: программа зависала и съедала память.
+        var path = inner.resolvingSymlinksInPath().standardizedFileURL.path
         while true {
-            if same(current, outer) { return true }
-            let parent = current.deletingLastPathComponent()
-            if parent.path == current.path { return false }
-            current = parent
+            if same(URL(fileURLWithPath: path), outer) { return true }
+            let parent = (path as NSString).deletingLastPathComponent
+            if parent == path || parent.isEmpty { return false }
+            path = parent
         }
     }
 }
