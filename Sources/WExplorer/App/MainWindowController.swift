@@ -34,7 +34,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var pendingRename: URL?
     /// «Вырезанные» файлы — общие для всех окон, чтобы Cmd+X в одном и Cmd+V в другом переносили файлы.
 
-    init(location: Location, history: NavigationHistory = NavigationHistory()) {
+    init(location: Location, history: NavigationHistory = NavigationHistory(), select: [URL] = []) {
         self.location = location
         self.history = history
         let window = NSWindow(
@@ -53,7 +53,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         connect()
         browser.mode = FolderViews.view(for: location).mode
         sidebar.folderTree.showHidden = settings.showHidden
-        navigate(to: location, recordHistory: false)
+        navigate(to: location, recordHistory: false, select: select)
         window.initialFirstResponder = browser.activeView
     }
 
@@ -560,7 +560,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         add(tr(.open), bold: true) { [weak self] in self?.navigate(to: place) }
         add(tr(.openInNewWindow)) { [weak self] in self?.openNewWindow(at: place) }
         guard let url = place.url else { return menu }
-        add(tr(.showInFinder)) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        add(tr(.showInFinder)) { FinderReplacement.showInFinder([url]) }
         add(tr(.openInTerminal)) {
             guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
             NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())

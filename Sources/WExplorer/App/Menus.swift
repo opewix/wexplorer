@@ -176,10 +176,18 @@ enum Menus {
             item(tr(.showHiddenFiles), #selector(W.toggleHidden(_:))),
             item(tr(.hideExtensions), #selector(W.toggleHideExtensions(_:))),
             .separator(),
+            finderReplacementItem(),
             item(tr(.systemSettings), #selector(W.openSystemSettings(_:))),
             .separator(),
             languageMenu(),
         ])
+    }
+
+    /// «Показать в Finder» и открытие папок в других программах ведут сюда (`FinderReplacement`).
+    static func finderReplacementItem() -> NSMenuItem {
+        let item = item(tr(.useInsteadOfFinder), #selector(AppDelegate.toggleFinderReplacement(_:)))
+        item.state = FinderReplacement.isOn ? .on : .off
+        return item
     }
 
     /// «Язык ▸ English / Русский …» — список берётся из L10n.languages.

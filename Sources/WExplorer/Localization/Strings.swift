@@ -42,6 +42,7 @@ enum Str: String, CaseIterable {
 
     // Сервис
     case openInTerminal, showHiddenFiles, systemSettings, language
+    case useInsteadOfFinder, finderReplacementOnTitle, finderReplacementOnText
 
     // Справка и меню приложения
     case keyboardShortcuts, shortcutsText, about, hideApp, hideOthers, quitApp

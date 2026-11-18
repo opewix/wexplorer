@@ -34,6 +34,10 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 - **One Dock icon per window** (View → Separate Dock Icon for Each Window, on by default): every
   new window runs as its own instance, like separate Explorer windows on the Windows taskbar;
   cut & paste and theme changes work across instances.
+- **Use instead of Finder** (Tools → Use Instead of Finder, off by default): “Show in Finder” /
+  “Reveal in Finder” in other apps opens WExplorer with the file selected, and folders opened by
+  other apps open in WExplorer (this part takes effect after you log in again). The desktop, the
+  Trash, Open and Save dialogs, and apps that talk to Finder directly still use Finder.
 - **Languages:** English and Russian (Tools → Language).
 - macOS keyboard shortcuts (⌘C / ⌘X / ⌘V); in the file list Ctrl+C / Ctrl+X / Ctrl+V work too.
 

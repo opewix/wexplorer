@@ -108,6 +108,9 @@ extension Language {
         .showHiddenFiles: "Show Hidden Files",
         .systemSettings: "System Settings...",
         .language: "Language",
+        .useInsteadOfFinder: "Use Instead of Finder",
+        .finderReplacementOnTitle: "{0} now opens instead of Finder",
+        .finderReplacementOnText: "“Show in Finder” in other apps now leads to {0}; apps that are already running may need a restart. Opening folders switches to {0} after you log in again. The desktop, the Trash, and the Open and Save dialogs still belong to Finder, and so do apps that call Finder directly.",
 
         // Help and app menu
         .keyboardShortcuts: "Keyboard Shortcuts",

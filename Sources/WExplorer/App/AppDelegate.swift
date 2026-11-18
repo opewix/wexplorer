@@ -11,9 +11,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             snapshot(into: directory)
             return
         }
+        // Запуск открытием папки или показом файла: окно уже открыл `application(_:open:)`.
         // Экземпляр, запущенный другим экземпляром, открывается там, куда его послали.
-        openWindow(at: Instances.startLocation ?? Self.startLocation(), frame: Instances.startFrame)
+        if controllers.isEmpty {
+            openWindow(at: Instances.startLocation ?? Self.startLocation(), frame: Instances.startFrame,
+                       select: Instances.startSelection)
+        }
         Instances.observeTheme { [weak self] theme, windowsFont in self?.apply(theme, windowsFont: windowsFont) }
+        Instances.observeShowRequests { [weak self] folder, select in self?.showInOwnWindow(folder, select: select) ?? false }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -43,6 +48,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             exit(0)
         }
+    }
+
+    // MARK: Открытие извне
+
+    /// Папку открыли этой программой или попросили показать файл («Показать в Finder» при включённой
+    /// замене Finder, `FinderReplacement`). Запросы неотличимы: папка открывается, файл — выделяется
+    /// в своей папке. Пакет (.app) — файл.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard Self.snapshotDirectory == nil else { return }
+        var targets: [(folder: URL, select: [URL])] = []
+        for url in urls where url.isFileURL {
+            let url = url.standardizedFileURL
+            let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true && !Places.isPackage(url)
+            let folder = isFolder ? url : url.deletingLastPathComponent()
+            guard FileManager.default.fileExists(atPath: folder.path) else { continue }
+            let select = isFolder ? [] : [url]
+            if let index = targets.firstIndex(where: { $0.folder.path == folder.path }) {
+                targets[index].select += select
+            } else {
+                targets.append((folder, select))
+            }
+        }
+        for target in targets { show(target.folder, select: target.select) }
+    }
+
+    private func show(_ folder: URL, select: [URL]) {
+        if showInOwnWindow(folder, select: select) { return }
+        if controllers.isEmpty {
+            // Программу этим событием и запустили: первое окно — наше.
+            openWindow(at: .folder(folder), select: select)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let open = { [weak self] in
+            guard let self else { return }
+            self.openNewWindow(at: .folder(folder), near: (NSApp.keyWindow ?? self.controllers.last?.window)?.frame, select: select)
+        }
+        if Instances.separate {
+            Instances.askOthersToShow(folder, select: select, otherwise: open)
+        } else {
+            open()
+        }
+    }
+
+    /// Окно с этой папкой на текущем столе уже есть — второе не нужно: выводим его вперёд.
+    private func showInOwnWindow(_ folder: URL, select: [URL]) -> Bool {
+        let location = Location.folder(folder)
+        guard let existing = controllers.first(where: {
+            $0.location == location && ($0.window.map { $0.isVisible && $0.isOnActiveSpace } ?? false)
+        }) else { return false }
+        if !select.isEmpty { existing.navigate(to: location, recordHistory: false, select: select) }
+        existing.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -83,8 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// frame — пересборка окна при смене темы: то же место на экране, та же история.
     @discardableResult
     func openWindow(at location: Location, history: NavigationHistory = NavigationHistory(),
-                    frame: NSRect? = nil, autosave: Bool = false) -> MainWindowController {
-        let controller = MainWindowController(location: location, history: history)
+                    frame: NSRect? = nil, autosave: Bool = false, select: [URL] = []) -> MainWindowController {
+        let controller = MainWindowController(location: location, history: history, select: select)
         if let window = controller.window {
             if let frame {
                 window.setFrame(frame, display: false)
@@ -138,14 +197,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Новое окно по команде пользователя. В режиме «отдельная иконка в Dock» — новый экземпляр.
-    func openNewWindow(at location: Location, near frame: NSRect?) {
+    func openNewWindow(at location: Location, near frame: NSRect?, select: [URL] = []) {
         guard Instances.separate, Instances.canLaunch else {
-            openWindow(at: location)
+            openWindow(at: location, select: select)
+            NSApp.activate(ignoringOtherApps: true)
             return
         }
-        Instances.launch(at: location, near: frame) { [weak self] in
+        Instances.launch(at: location, near: frame, select: select) { [weak self] in
             Alerts.error(tr(.cannotOpenWindow))
-            self?.openWindow(at: location)
+            self?.openWindow(at: location, select: select)
+        }
+    }
+
+    /// «Сервис → Использовать вместо Finder».
+    @objc func toggleFinderReplacement(_ sender: Any?) {
+        let on = !FinderReplacement.isOn
+        FinderReplacement.set(on)
+        NSApp.mainMenu = Menus.main()
+        if on {
+            Alerts.message(tr(.finderReplacementOnTitle, L10n.appName), info: tr(.finderReplacementOnText, L10n.appName))
         }
     }
 
@@ -197,5 +267,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var place = key?.location ?? .folder(Places.home)
         if case .search(_, let scope) = place { place = .folder(scope) }
         openNewWindow(at: place, near: key?.window?.frame)
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    /// Замену Finder включают и из другого экземпляра — отметка берётся из системы при показе меню.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(toggleFinderReplacement(_:)) {
+            item.state = FinderReplacement.isOn ? .on : .off
+            return FinderReplacement.available
+        }
+        return true
     }
 }

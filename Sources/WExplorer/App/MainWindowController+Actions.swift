@@ -43,9 +43,9 @@ extension MainWindowController: NSMenuItemValidation {
     @objc func showInFinder(_ sender: Any?) {
         let urls = browser.selectedItems.map(\.url)
         if !urls.isEmpty {
-            NSWorkspace.shared.activateFileViewerSelecting(urls)
+            FinderReplacement.showInFinder(urls)
         } else if let url = location.url {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
+            FinderReplacement.showInFinder([url])
         }
     }
 

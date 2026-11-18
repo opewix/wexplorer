@@ -39,6 +39,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>CFBundleDocumentTypes</key><array><dict>
+<key>CFBundleTypeName</key><string>Folder</string>
+<key>CFBundleTypeRole</key><string>Viewer</string>
+<key>LSHandlerRank</key><string>Alternate</string>
+<key>LSItemContentTypes</key><array><string>public.folder</string></array>
+</dict></array>
 <key>NSDesktopFolderUsageDescription</key><string>WExplorer показывает содержимое папки «Рабочий стол».</string>
 <key>NSDocumentsFolderUsageDescription</key><string>WExplorer показывает содержимое папки «Документы».</string>
 <key>NSDownloadsFolderUsageDescription</key><string>WExplorer показывает содержимое папки «Загрузки».</string>
