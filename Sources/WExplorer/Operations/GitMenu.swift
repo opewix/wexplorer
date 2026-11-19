@@ -55,8 +55,8 @@ enum GitMenu {
             group([
                 item(tr(.gitPush), "push"),
                 .separator(),
-                item(tr(.gitDiff), "diff"), item(tr(.gitLog), "log"), item(tr(.gitStatus), "status"),
-                item(tr(.gitBlame), "blame"),
+                item(tr(.gitLog), "log"), item(tr(.gitStatus), "status"),
+                item(tr(.gitDiff), "diff"), item(tr(.gitBlame), "blame"),
                 .separator(),
                 item(tr(.gitAdd), "add"), item(tr(.gitRevert), "revert"),
                 item(tr(.gitRename), "rename"), item(tr(.gitDelete), "delete"),
