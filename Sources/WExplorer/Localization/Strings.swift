@@ -24,7 +24,7 @@ enum Str: String, CaseIterable {
     case menuFile, menuEdit, menuView, menuFavorites, menuTools, menuHelp, menuGo, menuWindow
 
     // Меню «Файл»
-    case newWindow, newFolder, newTextDocument, open, openInNewWindow, showInFinder
+    case newWindow, newFolder, newTextDocument, open, openInNewWindow, showInFinder, eject, ejectFailed
     case delete, rename, properties
 
     // Меню «Правка»

@@ -78,6 +78,12 @@ struct GitSnapshot {
 
     func contains(_ path: String) -> Bool { path == root || path.hasPrefix(root + "/") }
 
+    /// Значок самой корневой папки: есть ли в рабочей копии изменения.
+    var rootBadge: GitBadge {
+        if changed.values.contains(.conflicted) { return .conflicted }
+        return changed.isEmpty ? .normal : .modified
+    }
+
     func badge(for path: String) -> GitBadge? {
         guard path.hasPrefix(root + "/") else { return nil }
         let relative = String(path.dropFirst(root.count + 1))
@@ -103,6 +109,20 @@ enum GitStatus {
         DispatchQueue.global(qos: .utility).async {
             let snapshot = GitMenu.root(of: path).flatMap { read(root: $0, git: git) }
             DispatchQueue.main.async { completion(snapshot) }
+        }
+    }
+
+    /// Значки для папок, которые сами — корень рабочей копии (в них лежит `.git`): изменено ли что-то внутри.
+    /// Нужны, когда открыта папка вне рабочей копии: её состояние такие папки не покрывает.
+    static func loadRoots(among folders: [URL], completion: @escaping ([String: GitBadge]) -> Void) {
+        guard GitMenu.isAvailable, let git, !folders.isEmpty else { return completion([:]) }
+        DispatchQueue.global(qos: .utility).async {
+            var badges: [String: GitBadge] = [:]
+            for folder in folders where FileManager.default.fileExists(atPath: folder.path + "/.git") {
+                guard let snapshot = read(root: folder.path, git: git) else { continue }
+                badges[folder.path] = snapshot.rootBadge
+            }
+            DispatchQueue.main.async { completion(badges) }
         }
     }
 

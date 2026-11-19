@@ -49,6 +49,11 @@ extension MainWindowController: NSMenuItemValidation {
         }
     }
 
+    /// «Извлечь» для выбранных дисков в «Компьютере».
+    @objc func ejectSelection(_ sender: Any?) {
+        VolumeEject.eject(browser.selectedItems.filter { $0.isVolume && VolumeEject.canEject($0.url) }.map(\.url))
+    }
+
     @objc func openInTerminal(_ sender: Any?) {
         let selected = browser.selectedItems
         let dir = selected.count == 1 && selected[0].isDirectory ? selected[0].url : location.url

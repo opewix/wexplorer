@@ -210,13 +210,14 @@ enum Menus {
 
     // MARK: Контекстные меню
 
-    static func itemContext(hasFolder: Bool, openWith: NSMenuItem?, archives: [NSMenuItem], git: [NSMenuItem]) -> NSMenu {
+    static func itemContext(hasFolder: Bool, canEject: Bool = false, openWith: NSMenuItem?, archives: [NSMenuItem], git: [NSMenuItem]) -> NSMenu {
         let open = item(tr(.open), #selector(W.openSelection(_:)))
         open.attributedTitle = NSAttributedString(string: tr(.open), attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
         var items = [open]
         if let openWith { items.append(openWith) }
         if hasFolder { items.append(item(tr(.openInNewWindow), #selector(W.openInNewWindow(_:)))) }
         items.append(item(tr(.showInFinder), #selector(W.showInFinder(_:))))
+        if canEject { items += [.separator(), item(tr(.eject), #selector(W.ejectSelection(_:)))] }
         if !archives.isEmpty { items += [.separator()] + archives }
         if !git.isEmpty { items += [.separator()] + git }
         items += [

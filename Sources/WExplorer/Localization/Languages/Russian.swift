@@ -64,6 +64,8 @@ extension Language {
         .open: "Открыть",
         .openInNewWindow: "Открыть в новом окне",
         .showInFinder: "Показать в Finder",
+        .eject: "Извлечь",
+        .ejectFailed: "Не удалось извлечь «{0}».",
         .delete: "Удалить",
         .rename: "Переименовать",
         .properties: "Свойства",

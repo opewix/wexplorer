@@ -64,6 +64,8 @@ extension Language {
         .open: "Open",
         .openInNewWindow: "Open in New Window",
         .showInFinder: "Show in Finder",
+        .eject: "Eject",
+        .ejectFailed: "Could not eject “{0}”.",
         .delete: "Delete",
         .rename: "Rename",
         .properties: "Properties",

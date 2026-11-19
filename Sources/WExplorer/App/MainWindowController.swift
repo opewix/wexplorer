@@ -26,6 +26,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private var loadGeneration = 0
     /// Последнее известное состояние Git открытой папки — чтобы значки не мигали при обновлении списка.
     private var gitSnapshot: GitSnapshot?
+    /// Значки папок — корней рабочих копий, когда открытая папка сама вне рабочей копии. Ключ — путь.
+    private var gitRootBadges: [String: GitBadge] = [:]
     private var volumeObservers: [NSObjectProtocol] = []
     private var searchSequence = 0
     /// Переименованное в результатах поиска: старый путь → новый адрес, пока Spotlight не догонит.
@@ -350,22 +352,38 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     func refreshGitBadges() {
         guard case .folder(let url) = location else {
             gitSnapshot = nil
+            gitRootBadges = [:]
             return
         }
         let generation = loadGeneration
         GitStatus.load(for: url) { [weak self] snapshot in
             guard let self, generation == self.loadGeneration else { return }
             self.gitSnapshot = snapshot
-            var changed = false
-            for item in self.browser.items {
-                let badge = snapshot?.badge(for: item.url.path)
-                if item.gitBadge != badge {
-                    item.gitBadge = badge
-                    changed = true
-                }
+            if let snapshot {
+                self.gitRootBadges = [:]
+                self.setGitBadges { snapshot.badge(for: $0) }
+                return
             }
-            if changed { self.browser.refreshIcons() }
+            // Папка вне рабочей копии: значок получают лежащие в ней корни рабочих копий.
+            let folders = self.browser.items.filter(\.isDirectory).map(\.url)
+            GitStatus.loadRoots(among: folders) { [weak self] badges in
+                guard let self, generation == self.loadGeneration else { return }
+                self.gitRootBadges = badges
+                self.setGitBadges { badges[$0] }
+            }
         }
+    }
+
+    private func setGitBadges(_ badge: (String) -> GitBadge?) {
+        var changed = false
+        for item in browser.items {
+            let value = badge(item.url.path)
+            if item.gitBadge != value {
+                item.gitBadge = value
+                changed = true
+            }
+        }
+        if changed { browser.refreshIcons() }
     }
 
     func apply(_ items: [FileItem]) {
@@ -373,6 +391,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             items.forEach { $0.gitBadge = snapshot.badge(for: $0.url.path) }
         } else {
             gitSnapshot = nil
+            // До свежего ответа git показываем прежние значки корней, чтобы они не мигали при перечитывании.
+            items.forEach { $0.gitBadge = gitRootBadges[$0.url.path] }
         }
         let sorted = FileItem.sorted(items, by: settings.sortKey, ascending: settings.ascending)
         browser.setItems(sorted, selecting: pendingSelection ?? [])
@@ -597,6 +617,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
             NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
         }
+        if VolumeEject.canEject(url) {
+            menu.addItem(.separator())
+            add(tr(.eject)) { VolumeEject.eject([url]) }
+        }
         let git = GitMenu.items(for: [url])
         if !git.isEmpty {
             menu.addItem(.separator())
@@ -779,6 +803,7 @@ extension MainWindowController: FileBrowserDelegate {
         if onItem {
             let selected = browser.selectedItems
             return Menus.itemContext(hasFolder: selected.contains { $0.isDirectory },
+                                     canEject: !selected.isEmpty && selected.allSatisfy { $0.isVolume && VolumeEject.canEject($0.url) },
                                      openWith: OpenWithMenu.item(for: openWithURLs),
                                      archives: Menus.archiveMenus(for: selected),
                                      git: GitMenu.items(for: selected.filter { !$0.isVolume }.map(\.url)))
