@@ -4,6 +4,12 @@ A Windows XP-style file manager for macOS. The Luna look, the task pane, the fol
 address bar you remember — running natively on your Mac. Prefer the newer look? Switch to the
 Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 
+> **Windows-style utilities for macOS** — one set, each works on its own:  
+> **WExplorer** — file manager  
+> [WTaskbar](https://github.com/opewix/wtaskbar) — taskbar and Start menu instead of the Dock  
+> [WPhoto](https://github.com/opewix/wphoto) — picture viewer  
+> [WTortoise](https://github.com/opewix/wtortoise) — Git in the right-click menu, like TortoiseGit
+
 ![WExplorer in the Windows XP theme](reference/window-snapshot-en.png)
 
 ![WExplorer in the Windows 10 theme](reference/window-snapshot-win10-en.png)
