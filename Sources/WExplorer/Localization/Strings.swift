@@ -151,4 +151,9 @@ enum Str: String, CaseIterable {
     case dropCopyHere, dropMoveHere, dropShortcutsHere, dropCancel
     case shortcutTo, shortcutToNumbered, nameShortcut, nameShortcutNumbered
     case cannotCreateShortcut, actionCreateShortcut
+
+    // Git: пункты для программы WTortoise, если она установлена
+    case gitPull, gitFetch, gitCommitTo, gitClone, gitCloneInGroup, gitCreateRepository
+    case gitPush, gitDiff, gitLog, gitStatus, gitBlame, gitAdd, gitRevert, gitRename, gitDelete
+    case gitSwitch, gitMerge, gitBranch, gitTag, gitStash, gitStashPop, gitSettings, gitAbout
 }

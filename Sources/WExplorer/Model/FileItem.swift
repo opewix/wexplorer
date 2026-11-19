@@ -17,7 +17,20 @@ final class FileItem {
     /// Доп. строка для «Плитки» и панели «Подробно» (например, свободное место на диске).
     let detail: String?
 
-    private(set) lazy var icon: NSImage = XPIcons.icon(for: self)
+    private lazy var baseIcon: NSImage = XPIcons.icon(for: self)
+    private var badgedIcon: NSImage?
+    /// Состояние в Git — значок поверх иконки (см. `GitStatus`).
+    var gitBadge: GitBadge? {
+        didSet { if gitBadge != oldValue { badgedIcon = nil } }
+    }
+
+    var icon: NSImage {
+        guard let gitBadge else { return baseIcon }
+        if let badgedIcon { return badgedIcon }
+        let image = gitBadge.overlay(on: baseIcon)
+        badgedIcon = image
+        return image
+    }
     /// Расширение, которое прячется при «Скрывать расширения…» (см. `FileExtensions`).
     private(set) lazy var knownExtension: String? =
         FileExtensions.knownExtension(name: name, isDirectory: isDirectory, isVolume: isVolume, contentType: contentType)

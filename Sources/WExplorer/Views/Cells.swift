@@ -41,6 +41,10 @@ final class NameCellView: NSTableCellView {
         setCut(isCut)
     }
 
+    func setIcon(_ icon: NSImage) {
+        imageView?.image = icon
+    }
+
     /// Вырезанный файл — бледный значок, подпись как обычно.
     func setCut(_ isCut: Bool) {
         imageView?.alphaValue = isCut ? 0.5 : 1

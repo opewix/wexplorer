@@ -187,6 +187,21 @@ final class FileBrowserView: LunaView {
         select(urls: selected)
     }
 
+    /// Значки объектов сменились (состояние Git) — обновить видимые, не трогая выделение и переименование.
+    func refreshIcons() {
+        let nameColumn = table.column(withIdentifier: NSUserInterfaceItemIdentifier(SortKey.name.columnID))
+        if nameColumn >= 0 {
+            let rows = table.rows(in: table.visibleRect)
+            for row in rows.lowerBound..<rows.upperBound where row < items.count {
+                (table.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NameCellView)?.setIcon(items[row].icon)
+            }
+        }
+        for indexPath in collection.indexPathsForVisibleItems() where indexPath.item < items.count {
+            let item = items[indexPath.item]
+            (collection.item(at: indexPath) as? IconItem)?.setImage(image(for: item))
+        }
+    }
+
     /// Буфер обмена сменился — перерисовать значки видимых файлов (вырезанные бледнеют).
     @objc private func cutFilesDidChange() {
         let nameColumn = table.column(withIdentifier: NSUserInterfaceItemIdentifier(SortKey.name.columnID))

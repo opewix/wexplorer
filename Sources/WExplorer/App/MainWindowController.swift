@@ -24,6 +24,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     private let watcher = DirectoryWatcher()
     private let search = FileSearch()
     private var loadGeneration = 0
+    /// Последнее известное состояние Git открытой папки — чтобы значки не мигали при обновлении списка.
+    private var gitSnapshot: GitSnapshot?
     private var volumeObservers: [NSObjectProtocol] = []
     private var searchSequence = 0
     /// Переименованное в результатах поиска: старый путь → новый адрес, пока Spotlight не догонит.
@@ -272,6 +274,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Буфер обмена могли сменить в другой программе — «Вставить» на ленте сверяется с ним заново.
     func windowDidBecomeKey(_ notification: Notification) {
         if Theme.isWin10 { ribbon.refresh() }
+        // Из окна WTortoise могли зафиксировать или отменить изменения.
+        refreshGitBadges()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -320,6 +324,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                     switch result {
                     case .success(let items):
                         self.apply(items)
+                        self.refreshGitBadges()
                         self.sidebar.folderTree.refresh(url)
                     case .failure(let error): self.handleLoadError(error, url: url)
                     }
@@ -341,7 +346,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
     }
 
+    /// Перечитать состояние Git открытой папки и обновить значки на файлах.
+    func refreshGitBadges() {
+        guard case .folder(let url) = location else {
+            gitSnapshot = nil
+            return
+        }
+        let generation = loadGeneration
+        GitStatus.load(for: url) { [weak self] snapshot in
+            guard let self, generation == self.loadGeneration else { return }
+            self.gitSnapshot = snapshot
+            var changed = false
+            for item in self.browser.items {
+                let badge = snapshot?.badge(for: item.url.path)
+                if item.gitBadge != badge {
+                    item.gitBadge = badge
+                    changed = true
+                }
+            }
+            if changed { self.browser.refreshIcons() }
+        }
+    }
+
     func apply(_ items: [FileItem]) {
+        if let snapshot = gitSnapshot, case .folder(let url) = location, snapshot.contains(url.path) {
+            items.forEach { $0.gitBadge = snapshot.badge(for: $0.url.path) }
+        } else {
+            gitSnapshot = nil
+        }
         let sorted = FileItem.sorted(items, by: settings.sortKey, ascending: settings.ascending)
         browser.setItems(sorted, selecting: pendingSelection ?? [])
         pendingSelection = nil
@@ -565,6 +597,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
             NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
         }
+        let git = GitMenu.items(for: [url])
+        if !git.isEmpty {
+            menu.addItem(.separator())
+            git.forEach(menu.addItem)
+        }
         menu.addItem(.separator())
         add(tr(.copyPath)) { [weak self] in
             NSPasteboard.general.clearContents()
@@ -743,9 +780,10 @@ extension MainWindowController: FileBrowserDelegate {
             let selected = browser.selectedItems
             return Menus.itemContext(hasFolder: selected.contains { $0.isDirectory },
                                      openWith: OpenWithMenu.item(for: openWithURLs),
-                                     archives: Menus.archiveMenus(for: selected))
+                                     archives: Menus.archiveMenus(for: selected),
+                                     git: GitMenu.items(for: selected.filter { !$0.isVolume }.map(\.url)))
         }
-        return location.url == nil ? nil : Menus.backgroundContext()
+        return location.url.map { Menus.backgroundContext(git: GitMenu.items(for: [$0])) }
     }
 
     func browserRename(_ url: URL?, to name: String?) {

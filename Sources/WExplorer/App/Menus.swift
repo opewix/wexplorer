@@ -210,7 +210,7 @@ enum Menus {
 
     // MARK: Контекстные меню
 
-    static func itemContext(hasFolder: Bool, openWith: NSMenuItem?, archives: [NSMenuItem]) -> NSMenu {
+    static func itemContext(hasFolder: Bool, openWith: NSMenuItem?, archives: [NSMenuItem], git: [NSMenuItem]) -> NSMenu {
         let open = item(tr(.open), #selector(W.openSelection(_:)))
         open.attributedTitle = NSAttributedString(string: tr(.open), attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
         var items = [open]
@@ -218,6 +218,7 @@ enum Menus {
         if hasFolder { items.append(item(tr(.openInNewWindow), #selector(W.openInNewWindow(_:)))) }
         items.append(item(tr(.showInFinder), #selector(W.showInFinder(_:))))
         if !archives.isEmpty { items += [.separator()] + archives }
+        if !git.isEmpty { items += [.separator()] + git }
         items += [
             .separator(),
             item(tr(.cut), #selector(NSText.cut(_:))),
@@ -271,7 +272,7 @@ enum Menus {
         return submenu(kind == .builtin ? tr(.archiveMenu) : "7-Zip", items)
     }
 
-    static func backgroundContext() -> NSMenu {
+    static func backgroundContext(git: [NSMenuItem]) -> NSMenu {
         menu("", [
             submenu(tr(.menuView), viewModes()),
             submenu(tr(.arrangeIcons), sortItems()),
@@ -286,6 +287,7 @@ enum Menus {
                 .separator(),
                 item(tr(.createTextDocument), #selector(W.newTextFile(_:))),
             ]),
+        ] + (git.isEmpty ? [] : [.separator()] + git) + [
             .separator(),
             item(tr(.openInTerminal), #selector(W.openInTerminal(_:))),
             item(tr(.properties), #selector(W.showProperties(_:))),

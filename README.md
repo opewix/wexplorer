@@ -30,6 +30,10 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 - **Archives:** extract and create zip, 7z and tar out of the box. If
   [7-Zip](https://www.7-zip.org/) is installed (`brew install sevenzip`), WExplorer can use it for
   more formats and for creating password-protected archives.
+- **Git in the right-click menu**, like TortoiseGit on Windows: *Git Pull…*, *Git Fetch…*,
+  *Git Commit -> "branch"…* and a **WTortoise** group with the rest, plus status badges on file
+  icons (unchanged, modified, added, conflicted). Both appear when
+  [WTortoise](https://github.com/opewix/wtortoise) is installed.
 - **Search** powered by Spotlight, **Favorites**, **Properties** window.
 - **One Dock icon per window** (View → Separate Dock Icon for Each Window, on by default): every
   new window runs as its own instance, like separate Explorer windows on the Windows taskbar;
