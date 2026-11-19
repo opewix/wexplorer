@@ -426,6 +426,9 @@ extension Language {
         .cannotCreateShortcut: "Не удалось создать ярлык для «{0}»",
         .actionCreateShortcut: "создание ярлыка",
 
+        .gitSync: "Git: синхронизация…",
+        .gitPullInGroup: "Получить (Pull)…",
+        .gitFetchInGroup: "Извлечь (Fetch)…",
         .gitPull: "Git: получить (Pull)…",
         .gitFetch: "Git: извлечь (Fetch)…",
         .gitCommitTo: "Git: фиксация в «{0}»…",

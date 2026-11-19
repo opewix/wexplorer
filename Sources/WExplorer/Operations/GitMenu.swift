@@ -1,7 +1,7 @@
 import AppKit
 
-/// Пункты Git в контекстных меню — как у TortoiseGit в Проводнике: «Git Pull…», «Git Fetch…»,
-/// «Git Commit -> "ветка"…» и группа WTortoise с остальными командами.
+/// Пункты Git в контекстных меню — как у TortoiseGit в Проводнике: «Git Sync…»,
+/// «Git Commit -> "ветка"…» и группа WTortoise с остальными командами (сверху Pull, Fetch, Push).
 ///
 /// Работают через программу WTortoise (github.com/opewix/wtortoise): пункт открывает её ссылкой
 /// `wtortoise://команда?path=…`. Не установлена — пунктов нет. Сами с git не работаем.
@@ -49,22 +49,23 @@ enum GitMenu {
             return [item(tr(.gitClone), "clone"), item(tr(.gitCreateRepository), "init"), group(tail)]
         }
         return [
-            item(tr(.gitPull), "pull"),
-            item(tr(.gitFetch), "fetch"),
+            item(tr(.gitSync), "sync"),
             item(tr(.gitCommitTo, branch(root: root) ?? "HEAD"), "commit"),
             group([
-                item(tr(.gitPush), "push"),
+                // Порядок и разделители — как в подменю TortoiseGit; тот же, что в меню WTortoise в Finder.
+                item(tr(.gitPullInGroup), "pull"), item(tr(.gitFetchInGroup), "fetch"), item(tr(.gitPush), "push"),
+                .separator(),
+                item(tr(.gitDiff), "diff"),
                 .separator(),
                 item(tr(.gitLog), "log"), item(tr(.gitStatus), "status"),
-                item(tr(.gitDiff), "diff"), item(tr(.gitBlame), "blame"),
+                item(tr(.gitStash), "stash"), item(tr(.gitStashPop), "stashpop"),
                 .separator(),
-                item(tr(.gitAdd), "add"), item(tr(.gitRevert), "revert"),
-                item(tr(.gitRename), "rename"), item(tr(.gitDelete), "delete"),
+                item(tr(.gitRename), "rename"), item(tr(.gitDelete), "delete"), item(tr(.gitRevert), "revert"),
                 .separator(),
                 item(tr(.gitSwitch), "switch"), item(tr(.gitMerge), "merge"),
                 item(tr(.gitBranch), "branch"), item(tr(.gitTag), "tag"),
                 .separator(),
-                item(tr(.gitStash), "stash"), item(tr(.gitStashPop), "stashpop"),
+                item(tr(.gitAdd), "add"), item(tr(.gitBlame), "blame"),
                 .separator(),
                 item(tr(.gitCloneInGroup), "clone"),
                 .separator(),

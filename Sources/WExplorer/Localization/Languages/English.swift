@@ -426,6 +426,9 @@ extension Language {
         .cannotCreateShortcut: "Could not create a shortcut to “{0}”",
         .actionCreateShortcut: "Create Shortcut",
 
+        .gitSync: "Git Sync...",
+        .gitPullInGroup: "Pull...",
+        .gitFetchInGroup: "Fetch...",
         .gitPull: "Git Pull...",
         .gitFetch: "Git Fetch...",
         .gitCommitTo: "Git Commit -> \"{0}\"...",
