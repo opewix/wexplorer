@@ -153,7 +153,7 @@ enum Str: String, CaseIterable {
     case cannotCreateShortcut, actionCreateShortcut
 
     // Git: пункты для программы WTortoise, если она установлена
-    case gitSync, gitPullInGroup, gitFetchInGroup, gitPull, gitFetch, gitCommitTo, gitClone, gitCloneInGroup, gitCreateRepository
+    case gitSync, gitRebase, gitExport, gitRefLog, gitRefBrowse, gitDiffPrevious, gitStashList, gitResolve, gitCleanup, gitReset, gitPullInGroup, gitFetchInGroup, gitPull, gitFetch, gitCommitTo, gitClone, gitCloneInGroup, gitCreateRepository
     case gitPush, gitDiff, gitLog, gitStatus, gitBlame, gitAdd, gitRevert, gitRename, gitDelete
     case gitSwitch, gitMerge, gitBranch, gitTag, gitStash, gitStashPop, gitSettings, gitAbout
 }

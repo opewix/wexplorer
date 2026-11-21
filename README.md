@@ -8,7 +8,8 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
 > **WExplorer** — file manager  
 > [WTaskbar](https://github.com/opewix/wtaskbar) — taskbar and Start menu instead of the Dock  
 > [WPhoto](https://github.com/opewix/wphoto) — picture viewer  
-> [WTortoise](https://github.com/opewix/wtortoise) — Git in the right-click menu, like TortoiseGit
+> [WTortoise](https://github.com/opewix/wtortoise) — Git in the right-click menu, like TortoiseGit  
+> [WMerge](https://github.com/opewix/wmerge) — file and folder compare, like WinMerge
 
 ![WExplorer in the Windows XP theme](reference/window-snapshot-en.png)
 
@@ -40,6 +41,9 @@ Windows 10 theme with its ribbon, breadcrumb address bar and navigation pane.
   *Git Commit -> "branch"…* and a **WTortoise** group with the rest, plus status badges on file
   icons (unchanged, modified, added, conflicted). Both appear when
   [WTortoise](https://github.com/opewix/wtortoise) is installed.
+- **WMerge in the right-click menu**, like WinMerge on Windows: select two files or folders to
+  compare them, one to put it on the left side, or right-click empty space to just open the app.
+  Appears when [WMerge](https://github.com/opewix/wmerge) is installed.
 - **Search** powered by Spotlight, **Favorites**, **Properties** window.
 - **One Dock icon per window** (View → Separate Dock Icon for Each Window, on by default): every
   new window runs as its own instance, like separate Explorer windows on the Windows taskbar;

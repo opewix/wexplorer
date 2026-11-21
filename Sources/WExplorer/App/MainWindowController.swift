@@ -621,7 +621,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             menu.addItem(.separator())
             add(tr(.eject)) { VolumeEject.eject([url]) }
         }
-        let git = GitMenu.items(for: [url])
+        let git = MergeMenu.items(for: [url]) + GitMenu.items(for: [url])
         if !git.isEmpty {
             menu.addItem(.separator())
             git.forEach(menu.addItem)
@@ -806,9 +806,10 @@ extension MainWindowController: FileBrowserDelegate {
                                      canEject: !selected.isEmpty && selected.allSatisfy { $0.isVolume && VolumeEject.canEject($0.url) },
                                      openWith: OpenWithMenu.item(for: openWithURLs),
                                      archives: Menus.archiveMenus(for: selected),
-                                     git: GitMenu.items(for: selected.filter { !$0.isVolume }.map(\.url)))
+                                     git: MergeMenu.items(for: selected.filter { !$0.isVolume }.map(\.url))
+                                         + GitMenu.items(for: selected.filter { !$0.isVolume }.map(\.url)))
         }
-        return location.url.map { Menus.backgroundContext(git: GitMenu.items(for: [$0])) }
+        return location.url.map { Menus.backgroundContext(git: MergeMenu.items(for: []) + GitMenu.items(for: [$0])) }
     }
 
     func browserRename(_ url: URL?, to name: String?) {
